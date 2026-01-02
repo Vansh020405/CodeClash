@@ -7,7 +7,7 @@ import { Search, Filter, ChevronLeft, Code2, CheckCircle, Circle, Clock, Trash2,
 import axios from "axios";
 import Navbar from "@/components/Navbar";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 type Problem = {
     id: string;
@@ -34,7 +34,7 @@ export default function ProblemsPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        axios.get(`${API_URL}/problems/`)
+        axios.get(`${API_BASE_URL}/api/problems/`)
             .then(res => {
                 const data = res.data.results || res.data;
                 setProblems(data);
@@ -68,7 +68,7 @@ export default function ProblemsPage() {
         if (!confirm("Are you sure you want to delete this problem?")) return;
 
         try {
-            await axios.delete(`${API_URL}/problems/${slug}/delete/`);
+            await axios.delete(`${API_BASE_URL}/api/problems/${slug}/delete/`);
             const updated = problems.filter(p => p.slug !== slug);
             setProblems(updated);
             setFilteredProblems(prev => prev.filter(p => p.slug !== slug));

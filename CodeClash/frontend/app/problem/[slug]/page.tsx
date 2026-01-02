@@ -8,7 +8,7 @@ import { Play, CloudUpload, ChevronLeft, List, Loader2 } from "lucide-react";
 import axios from "axios";
 import Link from "next/link";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function ProblemPage({ params }: { params: Promise<{ slug: string }> }) {
     // Unwrap the params Promise using React.use()
@@ -27,7 +27,7 @@ export default function ProblemPage({ params }: { params: Promise<{ slug: string
         if (activeTab === "submissions" && problem) {
             setLoadingSubmissions(true);
             // Ideally use an axios instance with interceptors for auth
-            axios.get(`${API_URL}/submissions/?problem_id=${problem.id}`)
+            axios.get(`${API_BASE_URL}/api/submissions/?problem_id=${problem.id}`)
                 .then(res => setSubmissions(res.data))
                 .catch(err => console.error("Failed to fetch submissions", err))
                 .finally(() => setLoadingSubmissions(false));
@@ -35,7 +35,7 @@ export default function ProblemPage({ params }: { params: Promise<{ slug: string
     }, [activeTab, problem]);
 
     useEffect(() => {
-        axios.get(`${API_URL}/problems/${slug}/`)
+        axios.get(`${API_BASE_URL}/api/problems/${slug}/`)
             .then(res => {
                 setProblem(res.data);
                 const templates = res.data.template_code;
@@ -61,7 +61,7 @@ export default function ProblemPage({ params }: { params: Promise<{ slug: string
         });
 
         try {
-            const res = await axios.post(`${API_URL}/executor/submit/`, {
+            const res = await axios.post(`${API_BASE_URL}/api/executor/submit/`, {
                 problem_id: problem.id,
                 code: code,
                 language: language,
@@ -94,7 +94,7 @@ export default function ProblemPage({ params }: { params: Promise<{ slug: string
         });
 
         try {
-            const res = await axios.post(`${API_URL}/executor/submit/`, {
+            const res = await axios.post(`${API_BASE_URL}/api/executor/submit/`, {
                 problem_id: problem.id,
                 code: code,
                 language: language,
@@ -112,7 +112,7 @@ export default function ProblemPage({ params }: { params: Promise<{ slug: string
         } finally {
             setIsRunning(false);
             if (problem && problem.id) {
-                axios.get(`${API_URL}/submissions/?problem_id=${problem.id}`)
+                axios.get(`${API_BASE_URL}/api/submissions/?problem_id=${problem.id}`)
                     .then(res => setSubmissions(res.data))
                     .catch(err => console.error("Failed to refresh submissions", err));
             }

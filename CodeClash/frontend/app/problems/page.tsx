@@ -7,7 +7,7 @@ import { Search, Filter, ChevronLeft, Code2, CheckCircle, Circle, Clock, Trash2,
 import axios from "axios";
 import Navbar from "@/components/Navbar";
 
-const API_URL = "http://localhost:8000/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
 type Problem = {
     id: string;

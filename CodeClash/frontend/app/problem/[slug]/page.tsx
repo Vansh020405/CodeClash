@@ -8,7 +8,7 @@ import { Play, CloudUpload, ChevronLeft, List, Loader2 } from "lucide-react";
 import axios from "axios";
 import Link from "next/link";
 
-const API_URL = "http://localhost:8000/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
 export default function ProblemPage({ params }: { params: Promise<{ slug: string }> }) {
     // Unwrap the params Promise using React.use()

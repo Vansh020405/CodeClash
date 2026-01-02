@@ -3,20 +3,46 @@ import { useState } from "react";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Wand2, AlertCircle, RefreshCw, Copy, Check } from "lucide-react";
+import { Wand2, AlertCircle, RefreshCw, Copy, Check, Terminal, Save, ArrowRight } from "lucide-react";
 import ProblemDescription from "@/components/ProblemDescription";
+import { useRouter } from "next/navigation";
 
 export default function GeneratorPage() {
+    const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
-    const [rawProblem, setRawProblem] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
+    const [title, setTitle] = useState("");
+    const [rawDescription, setRawDescription] = useState("");
     const [sampleInput, setSampleInput] = useState("");
     const [sampleOutput, setSampleOutput] = useState("");
+    const [constraints, setConstraints] = useState("");
+    const [inputFormat, setInputFormat] = useState("");
+    const [outputFormat, setOutputFormat] = useState("");
+    const [extraTestCases, setExtraTestCases] = useState<{ input: string; output: string }[]>([]);
     const [generatedProblem, setGeneratedProblem] = useState<any>(null);
     const [error, setError] = useState("");
 
-    const handleGenerate = () => {
-        if (!rawProblem.trim()) {
-            setError("Please enter a problem statement");
+    const handleAddTestCase = () => {
+        if (extraTestCases.length < 10) {
+            setExtraTestCases([...extraTestCases, { input: "", output: "" }]);
+        }
+    };
+
+    const handleRemoveTestCase = (index: number) => {
+        const newCases = [...extraTestCases];
+        newCases.splice(index, 1);
+        setExtraTestCases(newCases);
+    };
+
+    const handleTestCaseChange = (index: number, field: 'input' | 'output', value: string) => {
+        const newCases = [...extraTestCases];
+        newCases[index][field] = value;
+        setExtraTestCases(newCases);
+    };
+
+    const handleNormalize = async () => {
+        if (!title.trim() || !rawDescription.trim()) {
+            setError("Title and Description are required");
             return;
         }
 
@@ -24,54 +50,83 @@ export default function GeneratorPage() {
         setError("");
         setGeneratedProblem(null);
 
-        // Simulate AI Delay
-        setTimeout(() => {
-            setIsLoading(false);
-
-            // Mock Result
-            setGeneratedProblem({
-                title: "Remove Elements Greater Than X",
-                difficulty: "Medium",
-                description: `
-**Description:**
-
-You are given a linked list of quiz scores and a specific limit \`X\`. 
-Your task is to remove all nodes from the linked list that have a value **greater than** \`X\`.
-
-Return the head of the modified linked list.
-
-**Example 1:**
-\`\`\`
-Input: head = [6, 3, 2, 4, 3, 6, 5], X = 3
-Output: [3, 2, 3]
-Explanation: Nodes with values 6, 4, 6, 5 are greater than 3 and are removed.
-\`\`\`
-
-**Constraints:**
-*   The number of nodes in the list is in the range \`[0, 10^5]\`.
-*   \`1 <= Node.val <= 1000\`
-*   \`1 <= X <= 1000\`
-                `,
-                constraints: "0 <= N <= 10^5\n1 <= X <= 1000",
-                follow_up: "Can you solve it in O(N) time and O(1) extra space?"
+        try {
+            const response = await fetch("http://127.0.0.1:8000/api/ai/normalize/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    title,
+                    description: rawDescription,
+                    input_format: inputFormat,
+                    output_format: outputFormat,
+                    sample_input: sampleInput,
+                    sample_output: sampleOutput,
+                    constraints: constraints,
+                    // Only send non-empty test cases
+                    extra_test_cases: extraTestCases.filter(tc => tc.input.trim() || tc.output.trim())
+                }),
             });
-        }, 2000);
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to normalize problem");
+            }
+
+            setGeneratedProblem(data.problem);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const handleLoadExample = () => {
-        setRawProblem(`Imagine you have a chain (a linked list) of individual quiz scores (nodes) from your students. You are giving out a special prize, but only for scores that are less than or equal to a specific limit X.
-Your task is to go through this list of scores and throw out (delete) any score that is too high (greater than X). You only keep the passing scores that qualify for the prize.
-You must complete the function deleteGreater(), which takes the head of the linked list as a parameter and returns the head of a new list in which no element (node) has a value greater than X.
-________________________________________
-Input Format
-•\tThe first line contains an integer N, the size of the list.
-•\tThe second line contains an integer X.
-•\tEach of the next N lines contains an integer list[i], where 0 ≤ i < N.
-________________________________________
-Output Format
-Print the node values of the resultant list separated by spaces.`);
+    const handleSave = async () => {
+        if (!generatedProblem) return;
+
+        setIsSaving(true);
+        try {
+            const response = await fetch("http://127.0.0.1:8000/api/ai/save/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    problem_data: generatedProblem
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to save problem");
+            }
+
+            // Redirect to the new problem page
+            if (data.problem && data.problem.slug) {
+                router.push(`/problem/${data.problem.slug}`);
+            } else {
+                router.push("/problems");
+            }
+
+        } catch (err: any) {
+            setError(err.message);
+            setIsSaving(false);
+        }
+    };
+
+    const handleLoadTemplate = () => {
+        setTitle("Delete Nodes Greater Than X");
+        setRawDescription(`Imagine you have a chain (a linked list) of individual quiz scores. You are giving out a special prize, but only for scores less than or equal to a specific limit X.
+Throw out (delete) any score that is too high (greater than X).`);
+        setInputFormat("The first line contains an integer T (number of test cases). For each test case:\nThe first line contains N (number of nodes) and X (limit).\nThe second line contains N space-separated integers representing the list values.");
+        setOutputFormat("For each test case, print the space-separated values of the modified linked list.");
         setSampleInput("6\n3\n2\n4\n3\n6\n5\n1");
         setSampleOutput("2 3 1");
+        setConstraints("1 <= N <= 10^5\n1 <= X <= 1000");
+        setExtraTestCases([]);
     };
 
     return (
@@ -82,25 +137,64 @@ Print the node values of the resultant list separated by spaces.`);
                 {/* Left Panel - Input */}
                 <div className="w-1/2 flex flex-col gap-4 bg-[#1a1a1a] p-6 rounded-xl border border-zinc-800 overflow-y-auto custom-scrollbar">
                     <div className="flex items-center justify-between mb-2">
-                        <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                            Problem Generator
+                        <h1 className="text-2xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">
+                            Problem Standardizer
                         </h1>
-                        <Button variant="outline" size="sm" onClick={handleLoadExample} className="text-xs h-8 bg-transparent border-zinc-700 hover:bg-zinc-800 text-zinc-400">
+                        <Button variant="outline" size="sm" onClick={handleLoadTemplate} className="text-xs h-8 bg-transparent border-zinc-700 hover:bg-zinc-800 text-zinc-400">
                             <RefreshCw size={12} className="mr-2" />
-                            Load Example
+                            Load Template
                         </Button>
                     </div>
 
                     <div className="space-y-4">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-zinc-300">Problem Statement <span className="text-red-500">*</span></label>
-                            <textarea
-                                value={rawProblem}
-                                onChange={(e) => setRawProblem(e.target.value)}
-                                placeholder="Paste your college problem statement here..."
-                                className="w-full min-h-[300px] bg-[#262626] border border-zinc-700 rounded-md p-3 text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500/50 font-mono text-sm resize-none placeholder:text-zinc-600"
+                            <label className="text-sm font-medium text-zinc-300">Problem Title <span className="text-red-500">*</span></label>
+                            <Input
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                placeholder="e.g. Remove Elements Greater Than X"
+                                className="bg-[#262626] border-zinc-700 text-zinc-300"
                             />
-                            <div className="text-right text-xs text-zinc-500">{rawProblem.length} chars</div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-zinc-300">Problem Description <span className="text-red-500">*</span></label>
+                            <textarea
+                                value={rawDescription}
+                                onChange={(e) => setRawDescription(e.target.value)}
+                                placeholder="Paste your raw problem statement here..."
+                                className="w-full min-h-[150px] bg-[#262626] border border-zinc-700 rounded-md p-3 text-zinc-300 focus:outline-none focus:ring-1 focus:ring-green-500/50 font-mono text-sm resize-none placeholder:text-zinc-600"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-zinc-300">Constraints (Optional)</label>
+                            <textarea
+                                value={constraints}
+                                onChange={(e) => setConstraints(e.target.value)}
+                                placeholder="e.g. 1 <= N <= 10^5"
+                                className="w-full min-h-[80px] bg-[#262626] border border-zinc-700 rounded-md p-3 text-zinc-300 focus:outline-none focus:ring-1 focus:ring-green-500/50 font-mono text-sm resize-none placeholder:text-zinc-600"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-zinc-300">Input Format (Optional)</label>
+                            <textarea
+                                value={inputFormat}
+                                onChange={(e) => setInputFormat(e.target.value)}
+                                placeholder="e.g. The first line contains an integer T..."
+                                className="w-full min-h-[80px] bg-[#262626] border border-zinc-700 rounded-md p-3 text-zinc-300 focus:outline-none focus:ring-1 focus:ring-green-500/50 font-mono text-sm resize-none placeholder:text-zinc-600"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-zinc-300">Output Format (Optional)</label>
+                            <textarea
+                                value={outputFormat}
+                                onChange={(e) => setOutputFormat(e.target.value)}
+                                placeholder="e.g. Print the maximum sum..."
+                                className="w-full min-h-[80px] bg-[#262626] border border-zinc-700 rounded-md p-3 text-zinc-300 focus:outline-none focus:ring-1 focus:ring-green-500/50 font-mono text-sm resize-none placeholder:text-zinc-600"
+                            />
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
@@ -110,7 +204,7 @@ Print the node values of the resultant list separated by spaces.`);
                                     value={sampleInput}
                                     onChange={(e) => setSampleInput(e.target.value)}
                                     placeholder="Input..."
-                                    className="w-full bg-[#262626] border border-zinc-700 rounded-md p-3 text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500/50 font-mono text-xs h-32 resize-none placeholder:text-zinc-600"
+                                    className="w-full bg-[#262626] border border-zinc-700 rounded-md p-3 text-zinc-300 focus:outline-none focus:ring-1 focus:ring-green-500/50 font-mono text-xs h-32 resize-none placeholder:text-zinc-600"
                                 />
                             </div>
                             <div className="space-y-2">
@@ -119,9 +213,51 @@ Print the node values of the resultant list separated by spaces.`);
                                     value={sampleOutput}
                                     onChange={(e) => setSampleOutput(e.target.value)}
                                     placeholder="Output..."
-                                    className="w-full bg-[#262626] border border-zinc-700 rounded-md p-3 text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500/50 font-mono text-xs h-32 resize-none placeholder:text-zinc-600"
+                                    className="w-full bg-[#262626] border border-zinc-700 rounded-md p-3 text-zinc-300 focus:outline-none focus:ring-1 focus:ring-green-500/50 font-mono text-xs h-32 resize-none placeholder:text-zinc-600"
                                 />
                             </div>
+                        </div>
+
+                        {/* Extra Test Cases UI */}
+                        <div className="space-y-3 pt-2 border-t border-zinc-800">
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-zinc-300">
+                                    Extra Test Cases (Optional, Max 10)
+                                </label>
+                                {extraTestCases.length < 10 && (
+                                    <Button
+                                        onClick={handleAddTestCase}
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-400/10"
+                                    >
+                                        + Add Case
+                                    </Button>
+                                )}
+                            </div>
+
+                            {extraTestCases.map((tc, idx) => (
+                                <div key={idx} className="grid grid-cols-2 gap-2 bg-[#262626]/50 p-2 rounded-md relative group">
+                                    <textarea
+                                        value={tc.input}
+                                        onChange={(e) => handleTestCaseChange(idx, 'input', e.target.value)}
+                                        placeholder={`Test Case ${idx + 1} Input`}
+                                        className="w-full bg-[#262626] border border-zinc-700 rounded p-2 text-zinc-300 text-xs h-20 resize-none"
+                                    />
+                                    <textarea
+                                        value={tc.output}
+                                        onChange={(e) => handleTestCaseChange(idx, 'output', e.target.value)}
+                                        placeholder={`Test Case ${idx + 1} Output`}
+                                        className="w-full bg-[#262626] border border-zinc-700 rounded p-2 text-zinc-300 text-xs h-20 resize-none"
+                                    />
+                                    <button
+                                        onClick={() => handleRemoveTestCase(idx)}
+                                        className="absolute -top-2 -right-2 bg-red-500/80 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            ))}
                         </div>
 
                         {error && (
@@ -132,19 +268,19 @@ Print the node values of the resultant list separated by spaces.`);
                         )}
 
                         <Button
-                            onClick={handleGenerate}
+                            onClick={handleNormalize}
                             disabled={isLoading}
-                            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium py-6 shadow-lg shadow-blue-500/20 transition-all border-none relative overflow-hidden"
+                            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-medium py-6 shadow-lg shadow-green-500/20 transition-all border-none relative overflow-hidden"
                         >
                             {isLoading ? (
                                 <div className="flex items-center gap-2">
                                     <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
-                                    Analyzing Problem Strategy...
+                                    Standardizing & Generating Cases...
                                 </div>
                             ) : (
                                 <div className="flex items-center gap-2">
-                                    <Wand2 size={18} />
-                                    Generate LeetCode-Style Problem
+                                    <Terminal size={18} />
+                                    Standardize & Generate Test Cases
                                 </div>
                             )}
                         </Button>
@@ -155,29 +291,36 @@ Print the node values of the resultant list separated by spaces.`);
                 <div className="w-1/2 flex flex-col bg-[#1a1a1a] rounded-xl border border-zinc-800 overflow-hidden relative">
                     {generatedProblem ? (
                         <div className="flex flex-col h-full">
-                            <div className="h-12 bg-[#262626] border-b border-zinc-800 flex items-center justify-between px-4">
+                            <div className="h-14 bg-[#262626] border-b border-zinc-800 flex items-center justify-between px-4">
                                 <span className="text-sm font-medium text-green-400 flex items-center gap-2">
-                                    <Check size={14} /> Generated Successfully
+                                    <Check size={14} /> Ready for Compiler
                                 </span>
-                                <Button variant="ghost" size="sm" className="h-8 text-zinc-400 hover:text-white hover:bg-zinc-800">
-                                    <Copy size={14} className="mr-2" /> Copy Markdown
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Button onClick={handleSave} disabled={isSaving} size="sm" className="h-8 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs">
+                                        {isSaving ? (
+                                            "Saving..."
+                                        ) : (
+                                            <>
+                                                <Save size={14} className="mr-2" /> Save & Go to Compiler <ArrowRight size={14} className="ml-1" />
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
                             </div>
                             <div className="flex-1 overflow-auto bg-[#262626] custom-scrollbar">
-                                {/* Using ProblemDescription assuming it handles partial props gracefully or pass full structure */}
-                                <div className="p-2">
-                                    <ProblemDescription problem={generatedProblem} />
+                                <div className="p-2 h-full">
+                                    <ProblemDescription problem={generatedProblem} previewMode={true} />
                                 </div>
                             </div>
                         </div>
                     ) : (
                         <div className="h-full flex flex-col items-center justify-center p-8 text-center text-zinc-500">
                             <div className="w-16 h-16 bg-zinc-800/50 rounded-full flex items-center justify-center mb-4 border border-zinc-700/50">
-                                <Wand2 size={24} className="opacity-20" />
+                                <Terminal size={24} className="opacity-20" />
                             </div>
-                            <h3 className="text-lg font-medium text-zinc-300 mb-2">No problem generated yet</h3>
+                            <h3 className="text-lg font-medium text-zinc-300 mb-2">No problem standardized yet</h3>
                             <p className="max-w-xs text-sm text-zinc-500">
-                                Paste your college problem statement on the left and click "Generate" to see the magic happen.
+                                Submit your raw problem to convert it into a compiler-ready format with hidden test cases.
                             </p>
                         </div>
                     )}
@@ -186,10 +329,10 @@ Print the node values of the resultant list separated by spaces.`);
                     {isLoading && (
                         <div className="absolute inset-0 bg-[#0a0a0a]/80 backdrop-blur-sm flex flex-col items-center justify-center z-10">
                             <div className="relative">
-                                <div className="w-16 h-16 border-4 border-blue-500/20 rounded-full"></div>
-                                <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+                                <div className="w-16 h-16 border-4 border-green-500/20 rounded-full"></div>
+                                <div className="w-16 h-16 border-4 border-green-500 border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
                             </div>
-                            <div className="mt-4 text-blue-400 font-medium animate-pulse">Polishing Description...</div>
+                            <div className="mt-4 text-green-400 font-medium animate-pulse">Running Test Case Engine...</div>
                         </div>
                     )}
                 </div>

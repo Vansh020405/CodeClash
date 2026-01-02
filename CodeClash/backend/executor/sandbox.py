@@ -11,7 +11,7 @@ class LanguageConfig:
         'image': 'python:3.10-slim',
         'extension': '.py',
         'compile_command': None,  # Python is interpreted
-        'run_command': 'python main.py',
+        'run_command': 'python -u main.py',
         'starter_template': '''class Solution:
     def solve(self):
         # Your code here
@@ -37,32 +37,6 @@ public:
 '''
     }
     
-    C = {
-        'image': 'gcc:11',
-        'extension': '.c',
-        'compile_command': 'gcc -O2 -std=c11 -o main main.c',
-        'run_command': './main',
-        'starter_template': '''#include <stdio.h>
-
-int main() {
-    // Your code here
-    return 0;
-}
-'''
-    }
-    
-    JAVA = {
-        'image': 'openjdk:17-slim',
-        'extension': '.java',
-        'compile_command': 'javac Main.java',
-        'run_command': 'java Main',
-        'starter_template': '''public class Main {
-    public static void main(String[] args) {
-        // Your code here
-    }
-}
-'''
-    }
     
     @staticmethod
     def get_config(language: str) -> Optional[Dict]:
@@ -70,8 +44,6 @@ int main() {
         lang_map = {
             'python': LanguageConfig.PYTHON,
             'cpp': LanguageConfig.CPP,
-            'c': LanguageConfig.C,
-            'java': LanguageConfig.JAVA,
         }
         return lang_map.get(language.lower())
 
@@ -93,7 +65,6 @@ class DockerSandbox:
         required_images = [
             'python:3.10-slim',
             'gcc:11',
-            'openjdk:17-slim'
         ]
         for image_name in required_images:
             try:
@@ -168,12 +139,15 @@ class DockerSandbox:
             )
             
             # Prepare source file
-            filename = f"main{config['extension']}"
+            # Java requires specific class name, others use main + extension
+            if 'filename' in config:
+                filename = config['filename']
+            else:
+                filename = f"main{config['extension']}"
             self._copy_to_container(container, f"/workspace/{filename}", code)
             
-            # Copy input if provided
-            if test_input:
-                self._copy_to_container(container, "/workspace/input.txt", test_input)
+            # Always create input.txt (empty if no input provided)
+            self._copy_to_container(container, "/workspace/input.txt", test_input or "")
             
             # Start container
             container.start()
@@ -199,7 +173,8 @@ class DockerSandbox:
             
             # Execution phase
             exec_start = time.time()
-            run_command = f"{config['run_command']} < input.txt" if test_input else config['run_command']
+            # Always use input redirection for consistency
+            run_command = f"{config['run_command']} < input.txt"
             
             exec_result = self._exec_in_container(
                 container,
@@ -218,8 +193,11 @@ class DockerSandbox:
                 verdict = "AC"  # Accepted (but needs output comparison)
             
             # Get container stats for memory usage
-            stats = container.stats(stream=False)
-            memory_kb = stats['memory_stats'].get('usage', 0) // 1024
+            try:
+                stats = container.stats(stream=False)
+                memory_kb = stats.get('memory_stats', {}).get('usage', 0) // 1024
+            except:
+                memory_kb = 0
             
             container.remove(force=True)
             
@@ -258,38 +236,50 @@ class DockerSandbox:
 
     def _exec_in_container(self, container, command: str, timeout: float = 5.0) -> Dict:
         """Execute command in container with timeout"""
-        try:
-            exec_instance = container.exec_run(
-                command,
-                demux=True,
-                stdin=True,
-                tty=False
-            )
-            
-            # Wait with timeout
-            start = time.time()
-            while container.status == 'running' and (time.time() - start) < timeout:
-                time.sleep(0.1)
-            
-            timed_out = (time.time() - start) >= timeout
-            
-            stdout = exec_instance.output[0].decode('utf-8') if exec_instance.output[0] else ""
-            stderr = exec_instance.output[1].decode('utf-8') if exec_instance.output[1] else ""
-            
-            return {
-                'exit_code': exec_instance.exit_code,
-                'stdout': stdout,
-                'stderr': stderr,
-                'timed_out': timed_out
-            }
-            
-        except Exception as e:
-            return {
-                'exit_code': -1,
-                'stdout': "",
-                'stderr': str(e),
-                'timed_out': False
-            }
+        import threading
+        
+        result = {
+            'exit_code': -1,
+            'stdout': "",
+            'stderr': "",
+            'timed_out': False
+        }
+        
+        def run_exec():
+            try:
+                exec_instance = container.exec_run(
+                    command,
+                    demux=True,
+                    stdin=False,
+                    tty=False
+                )
+                
+                # Parse output
+                stdout = exec_instance.output[0].decode('utf-8', errors='ignore') if exec_instance.output[0] else ""
+                stderr = exec_instance.output[1].decode('utf-8', errors='ignore') if exec_instance.output[1] else ""
+                
+                result['exit_code'] = exec_instance.exit_code
+                result['stdout'] = stdout
+                result['stderr'] = stderr
+            except Exception as e:
+                result['exit_code'] = -1
+                result['stderr'] = str(e)
+        
+        # Run execution in thread with timeout
+        thread = threading.Thread(target=run_exec)
+        thread.daemon = True
+        thread.start()
+        thread.join(timeout=timeout)
+        
+        if thread.is_alive():
+            # Timeout occurred
+            result['timed_out'] = True
+            try:
+                container.kill()
+            except:
+                pass
+        
+        return result
 
     def _copy_to_container(self, container, path: str, content: str):
         """Copy content to container as a file"""

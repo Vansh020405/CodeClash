@@ -82,12 +82,17 @@ class Judge:
                 "status": status,
                 "input": test_case.input_data,
                 "expected_output": test_case.expected_output,
-                "user_output": result["stdout"] if result["stdout"] is not None else "",
+                "user_output": result.get("stdout", ""),
+                "runtime_ms": result.get("runtime_ms", 0),
             }
             
             # Add error info if present
-            if result["stderr"]:
+            if result.get("stderr"):
                 test_case_result["stderr"] = result["stderr"]
+            
+            # Add verdict for debugging
+            if result["verdict"] != "Accepted":
+                test_case_result["verdict"] = result["verdict"]
 
             results.append(test_case_result)
             
@@ -135,12 +140,24 @@ class Judge:
         )
         
         # If execution failed, return immediately
+        print(f"DEBUG JUDGE: Verdict={execution_result['verdict']}")
+        print(f"DEBUG JUDGE: RAW STDOUT={repr(execution_result['stdout'])}")
+        print(f"DEBUG JUDGE: RAW STDERR={repr(execution_result['stderr'])}")
+
         if execution_result["verdict"] in ["TLE", "RE", "CE", "ERROR"]:
             return execution_result
         
         # Compare outputs
         user_output = self._normalize_output(execution_result["stdout"])
         expected_output = self._normalize_output(test_case.expected_output)
+        
+        # Debug logging for output comparison
+        if user_output != expected_output:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Output mismatch:")
+            logger.debug(f"  Expected (len={len(expected_output)}): {repr(expected_output)}")
+            logger.debug(f"  Got (len={len(user_output)}): {repr(user_output)}")
         
         if user_output == expected_output:
             execution_result["verdict"] = "Accepted"
@@ -155,26 +172,27 @@ class Judge:
         
         Rules:
         1. Strip all leading/trailing whitespace
-        2. Normalize internal whitespace (multiple spaces -> single space)
+        2. Normalize line endings to \n
         3. Remove trailing whitespace from each line
         4. Remove completely empty lines at start/end
-        5. Normalize line endings to \n
+        5. Collapse multiple consecutive blank lines to single blank line
         """
         if not output:
             return ""
         
-        # Strip overall whitespace
-        output = output.strip()
+        # Normalize line endings and strip overall whitespace
+        output = output.replace('\r\n', '\n').replace('\r', '\n').strip()
+        
+        if not output:
+            return ""
         
         # Split into lines
         lines = output.split('\n')
         
-        # Process each line
+        # Process each line - strip trailing whitespace
         normalized_lines = []
         for line in lines:
-            # Strip trailing whitespace from each line
-            line = line.rstrip()
-            normalized_lines.append(line)
+            normalized_lines.append(line.rstrip())
         
         # Remove leading empty lines
         while normalized_lines and not normalized_lines[0]:

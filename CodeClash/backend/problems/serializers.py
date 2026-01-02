@@ -18,12 +18,16 @@ class ProblemListSerializer(serializers.ModelSerializer):
         if not user or not user.is_authenticated:
             return "Unsolved"
         
-        # Check if user has solved it
-        # Note: Ideally this should be optimized with annotations in the view
-        if obj.submissions.filter(user=user, verdict="Accepted").exists():
-            return "Solved"
-        if obj.submissions.filter(user=user).exists():
-            return "Attempted"
+        try:
+            # Check if user has solved it
+            # Note: Ideally this should be optimized with annotations in the view
+            if obj.submissions.filter(user=user, verdict="Accepted").exists():
+                return "Solved"
+            if obj.submissions.filter(user=user).exists():
+                return "Attempted"
+        except AttributeError:
+            # submissions relationship doesn't exist yet
+            pass
         return "Unsolved"
 
 class ProblemDetailSerializer(serializers.ModelSerializer):
@@ -31,7 +35,7 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Problem
-        fields = ['id', 'title', 'slug', 'description', 'difficulty', 'template_code', 'test_cases', 'created_at']
+        fields = ['id', 'title', 'slug', 'description', 'input_format', 'output_format', 'constraints', 'difficulty', 'template_code', 'test_cases', 'created_at']
 
     def get_test_cases(self, obj):
         # Only return public test cases to the frontend

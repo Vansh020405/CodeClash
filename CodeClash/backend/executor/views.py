@@ -31,9 +31,9 @@ class JudgeSubmissionView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if language not in ['python', 'cpp', 'c', 'java']:
+        if language not in ['python', 'cpp']:
             return Response(
-                {"error": f"Unsupported language: {language}. Supported: python, cpp, c, java"},
+                {"error": f"Unsupported language: {language}. Supported: python, cpp"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -54,9 +54,15 @@ class JudgeSubmissionView(views.APIView):
             )
             
             # Save submission if in submit mode
-            if mode == 'submit' and request.user.is_authenticated:
+            if mode == 'submit':
+                user = request.user
+                if not user.is_authenticated:
+                    from django.contrib.auth import get_user_model
+                    User = get_user_model()
+                    user, _ = User.objects.get_or_create(username='guest', defaults={'email': 'guest@codeclash.com'})
+
                 Submission.objects.create(
-                    user=request.user,
+                    user=user,
                     problem_id=problem_id,
                     code=code,
                     language=language,
@@ -112,7 +118,7 @@ class ValidateReferenceView(views.APIView):
     """
     Admin endpoint to validate reference solutions
     """
-    permission_classes = [permissions.AllowAny]  # TODO: Restrict to admin only
+    permission_classes = [permissions.IsAdminUser]
     
     def post(self, request):
         problem_id = request.data.get('problem_id')

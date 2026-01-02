@@ -14,11 +14,20 @@ class SubmissionCreateView(generics.CreateAPIView):
         serializer.save(user=self.request.user)
 
 class SubmissionListView(generics.ListAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     serializer_class = SubmissionSerializer
 
     def get_queryset(self):
-        queryset = Submission.objects.filter(user=self.request.user).order_by('-created_at')
+        user = self.request.user
+        if not user.is_authenticated:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            try:
+                user = User.objects.get(username='guest')
+            except User.DoesNotExist:
+                return Submission.objects.none()
+
+        queryset = Submission.objects.filter(user=user).order_by('-created_at')
         problem_id = self.request.query_params.get('problem_id')
         if problem_id:
             queryset = queryset.filter(problem_id=problem_id)

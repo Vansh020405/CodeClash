@@ -1,73 +1,73 @@
 """
-API Views for AI Problem Generation
+API Views for AI Problem Normalization and Management
 """
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser, AllowAny
 from rest_framework.response import Response
-from django.conf import settings
 from problems.models import Problem, TestCase
 from problems.serializers import ProblemDetailSerializer
 from ai_generator import get_generator
-import uuid
-
 
 @api_view(['POST'])
-def generate_problem(request):
+@permission_classes([AllowAny])
+def normalize_problem(request):
     """
-    Generate a new problem using AI
+    Normalize a student-submitted problem into a compiler-ready format.
     
-    POST /api/ai/generate/
+    POST /api/ai/normalize/
     {
-        "difficulty": "Medium",
-        "topic": "Arrays",  # optional
-        "style": "leetcode"  # optional
+        "title": "Problem Title",
+        "description": "Raw description...",
+        "sample_input": "...",
+        "sample_output": "...",
+        "constraints": "O(N) time",
+        "extra_test_cases": [{"input": "...", "output": "..."}, ...]
     }
     """
-    difficulty = request.data.get('difficulty', 'Medium')
-    topic = request.data.get('topic', None)
-    style = request.data.get('style', 'leetcode')
+    title = request.data.get('title')
+    description = request.data.get('description')
+    sample_input = request.data.get('sample_input', '')
+    sample_output = request.data.get('sample_output', '')
+    input_format = request.data.get('input_format', '')
+    output_format = request.data.get('output_format', '')
+    constraints = request.data.get('constraints', '')
+    extra_test_cases = request.data.get('extra_test_cases', [])
     
-    # Validate difficulty
-    if difficulty not in ['Easy', 'Medium', 'Hard']:
+    if not title or not description:
         return Response(
-            {"error": "Invalid difficulty. Must be Easy, Medium, or Hard"},
+            {"error": "Title and Description are required"},
             status=status.HTTP_400_BAD_REQUEST
         )
     
     try:
-        # Generate problem
         generator = get_generator()
-        problem_data = generator.generate_problem(
-            difficulty=difficulty,
-            topic=topic,
-            style=style
+        normalized_problem = generator.normalize_problem(
+            title=title,
+            description=description,
+            sample_input=sample_input,
+            sample_output=sample_output,
+            input_format_str=input_format,
+            output_format_str=output_format,
+            constraints_input=constraints,
+            extra_test_cases=extra_test_cases
         )
         
-        if not problem_data:
-            return Response(
-                {"error": "Failed to generate problem. Please try again."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        
-        # Validate problem
-        is_valid, message = generator.validate_problem(problem_data)
-        if not is_valid:
-            return Response(
-                {"error": f"Generated problem has issues: {message}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Return generated problem (don't save yet - let admin review)
         return Response({
             "success": True,
-            "problem": problem_data,
-            "message": "Problem generated successfully. Review and save if it looks good."
+            "problem": normalized_problem
         })
         
-    except Exception as e:
+    except ValueError as e:
         return Response(
             {"error": str(e)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        # Log the error in a real app
+        print(f"Normalization failed: {e}")
+        return Response(
+            {"error": "Internal AI Processing Error. Please check your input and try again."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -75,13 +75,7 @@ def generate_problem(request):
 @permission_classes([AllowAny])
 def save_generated_problem(request):
     """
-    Save AI-generated problem to database
-    
-    POST /api/ai/save/
-    {
-        "problem_data": { ... },
-        "user_email": "user@example.com"  # Optional user email
-    }
+    Save normalized problem to database
     """
     problem_data = request.data.get('problem_data')
     user_email = request.data.get('user_email', None)
@@ -95,7 +89,7 @@ def save_generated_problem(request):
     try:
         # Create slug from title
         title = problem_data.get('title', 'Generated Problem')
-        slug = title.lower().replace(' ', '-').replace("'", "")
+        slug = title.lower().replace(' ', '-').replace("'", "").replace('"', '').strip('-')
         
         # Check if slug exists
         base_slug = slug
@@ -108,43 +102,49 @@ def save_generated_problem(request):
         test_cases_data = problem_data.pop('test_cases', [])
         reference_solution = problem_data.pop('reference_solution', {})
         
-        # Append constraints to description since there is no constraints field
-        description = problem_data.get('description', '')
-        constraints = problem_data.get('constraints', '')
-        if constraints:
-             # Check if description already has constraints to avoid logic duplication if simple append
-             description += f"\n\n**Constraints:**\n{constraints}"
-
         # Create problem
         problem = Problem.objects.create(
             title=title,
             slug=slug,
             difficulty=problem_data.get('difficulty', 'Medium'),
-            description=description,
-            # constraints field removed
+            description=problem_data.get('description', ''),
+            input_format=problem_data.get('input_format', ''),
+            output_format=problem_data.get('output_format', ''),
+            constraints=problem_data.get('constraints', ''),
             reference_solution=reference_solution,
-            template_code=problem_data.get('template_code', {
+            template_code={
                 'python': '# Write your solution here\n',
                 'cpp': '// Write your solution here\n',
-                'c': '// Write your solution here\n',
                 'java': '// Write your solution here\n'
-            }),
+            },
             time_limit_ms=2000,
             memory_limit_mb=256,
             created_by=user_email,
-            is_ai_generated=True
+            is_ai_generated=True,
+            # Store logic metadata if model supports it, otherwise ignore
         )
         
         # Create test cases
+        # Sort so sample is first if possible, but the list from generator usually has sample first
+        # Create test cases
+        # Sort so sample is first if possible, but the list from generator usually has sample first
         for idx, tc_data in enumerate(test_cases_data):
+            # Determine visibility
+            explanation = tc_data.get('explanation', '')
+            is_user_provided = explanation == "User provided test case"
+            is_sample = idx == 0
+            
+            # Allow user-provided cases and the first sample to be public
+            is_hidden = not (is_sample or is_user_provided)
+
             TestCase.objects.create(
                 problem=problem,
                 input_data=tc_data.get('input', ''),
                 expected_output=tc_data.get('output', ''),
-                is_hidden=(idx >= 3),  # First 3 are public, rest are hidden
+                is_hidden=is_hidden, 
+                order=idx
             )
         
-        # Serialize and return
         serializer = ProblemDetailSerializer(problem)
         
         return Response({
@@ -159,63 +159,16 @@ def save_generated_problem(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
-
-@api_view(['POST'])
-@permission_classes([IsAdminUser])
-def generate_test_cases(request):
-    """
-    Generate additional test cases for existing problem
-    
-    POST /api/ai/generate-tests/
-    {
-        "problem_id": "uuid",
-        "num_cases": 5
-    }
-    """
-    problem_id = request.data.get('problem_id')
-    num_cases = request.data.get('num_cases', 5)
-    
-    try:
-        problem = Problem.objects.get(id=problem_id)
-        
-        generator = get_generator()
-        new_test_cases = generator.generate_test_cases_only(
-            problem_description=problem.description,
-            num_cases=num_cases
-        )
-        
-        return Response({
-            "success": True,
-            "test_cases": new_test_cases
-        })
-        
-    except Problem.DoesNotExist:
-        return Response(
-            {"error": "Problem not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
-    except Exception as e:
-        return Response(
-            {"error": str(e)},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
-
 @api_view(['GET'])
 @permission_classes([IsAdminUser])
 def generator_status(request):
-    """Check if AI generator is configured and ready"""
+    """Check AI status"""
     try:
         import os
         has_api_key = bool(os.environ.get('GEMINI_API_KEY'))
-        
         return Response({
             "configured": has_api_key,
-            "message": "AI Generator is ready" if has_api_key else "GEMINI_API_KEY not set in environment",
-            "model": "gemini-pro"
+            "message": "AI Generator (Normalizer) is ready"
         })
     except Exception as e:
-        return Response({
-            "configured": False,
-            "error": str(e)
-        })
+        return Response({"configured": False, "error": str(e)})

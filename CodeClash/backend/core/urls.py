@@ -16,19 +16,16 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from ai_views import generate_problem, save_generated_problem, generate_test_cases, generator_status
-from api_template_first import generate_from_template_first
+from ai_views import normalize_problem, save_generated_problem, generator_status
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/problems/', include('problems.urls')),
-    path('api/submit/', include('submissions.urls')),
+    path('api/submissions/', include('submissions.urls')),
     path('api/executor/', include('executor.urls')),
     
-    # AI Generator endpoints
-    path('api/ai/generate/', generate_problem, name='ai-generate'),
-    path('api/ai/generate-similar/', generate_from_template_first, name='ai-generate-similar'),
+    # AI Generator endpoints (Normalization Only)
+    path('api/ai/normalize/', normalize_problem, name='ai-normalize'),
     path('api/ai/save/', save_generated_problem, name='ai-save'),
-    path('api/ai/generate-tests/', generate_test_cases, name='ai-generate-tests'),
     path('api/ai/status/', generator_status, name='ai-status'),
 ]

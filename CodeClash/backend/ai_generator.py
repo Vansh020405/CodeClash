@@ -1,338 +1,271 @@
 """
-AI Problem Generator using Google Gemini
-Generates complete coding problems with test cases and solutions
+AI Problem Normalizer using Google Gemini
+Converts student-submitted problems into compiler-ready standardized problems.
 """
 import os
 import json
+import subprocess
+import tempfile
+import sys
 from google import genai
 from typing import Dict, List, Optional
 
 # Configure Gemini
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-
+try:
+    client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+    print(f"Gemini Client Status: {'Ready' if client else 'Not Set'}", flush=True)
+except Exception as e:
+    print(f"Gemini Client Init Failed: {e}", flush=True)
+    client = None
 
 class ProblemGenerator:
-    """Generate coding problems using AI"""
+    """
+    Handles normalization of student problems into standardized formats.
+    NO random question generation allowed.
+    """
     
     def __init__(self):
         if not client:
+            print("ERROR: GEMINI_API_KEY not set or client init failed", flush=True)
             raise ValueError("GEMINI_API_KEY not set in environment")
         self.client = client
     
-    def generate_problem(
-        self,
-        difficulty: str = "Medium",
-        topic: Optional[str] = None,
-        style: str = "leetcode"
-    ) -> Dict:
+    def normalize_problem(self, title: str, description: str, sample_input: str, sample_output: str, constraints_input: str = "", input_format_str: str = "", output_format_str: str = "", extra_test_cases: List[Dict] = None) -> Dict:
         """
-        Generate a complete coding problem
+        Main entry point: Convert raw student input into a standardized problem.
+        Prioritizes AI analysis, but falls back to direct formatting if AI fails.
         """
-        prompt = self._build_prompt(difficulty, topic, style)
-        return self._generate_with_fallback(prompt)
-    
-    def generate_similar_problem(
-        self,
-        sample_problem: str,
-        sample_test_cases: str = ""
-    ) -> Dict:
-        """
-        Generate a similar problem based on a college sample
-        Also extracts and returns the problem schema
-        """
-        prompt = self._build_similar_prompt(sample_problem, sample_test_cases)
-        result = self._generate_with_fallback(prompt)
+        print(f"DEBUG: Normalizing problem '{title}'...", flush=True)
         
-        # Try to extract schema using AI
-        if result:
-            try:
-                schema = self._extract_schema(sample_problem)
-                result['extracted_schema'] = schema
-            except Exception as e:
-                print(f"Schema extraction failed: {e}")
-                result['extracted_schema'] = None
+        # Step 1: Logic Extraction & Schema Validation (AI)
+        schema = self._extract_logic_and_schema(title, description, sample_input, sample_output, constraints_input, input_format_str, output_format_str)
         
-        return result
-    
-    def _extract_schema(self, problem_text: str) -> dict:
+        # FAILSAFE: If AI fails to understand logic, use a fallback schema
+        if not schema or not schema.get('core_logic'):
+            print("DEBUG: Schema extraction failed or ambiguous. Falling back to direct formatting.", flush=True)
+            schema = {
+                "difficulty": "Medium",
+                "core_logic": "Logic checking disabled for this problem.",
+                "input_format": input_format_str or "See description",
+                "output_format": output_format_str or "See description",
+                "constraints": {"custom": constraints_input or "Standard limits"},
+                "topics": ["Implementation"],
+                "reference_solution_code": "def solve():\n    # TODO: Implement solution logic based on description\n    pass"
+            }
+        else:
+            print(f"DEBUG: Schema extracted. Logic: {schema.get('core_logic', '')[:50]}...", flush=True)
+            
+        
+        # Step 2: Generate Intelligence Engine (Python Code) or Use Fallback
+        test_cases = []
+        
+        # Only try generating code-based tests if we actually have core logic
+        if schema.get('core_logic') != "Logic checking disabled for this problem.":
+             generator_script = self._generate_test_case_script(schema, sample_input, sample_output)
+             if generator_script:
+                 print("DEBUG: Executing test case script...", flush=True)
+                 test_cases = self._execute_test_case_generator(generator_script)
+        
+        if not test_cases:
+             print("DEBUG: No system test cases generated. Using sample only.", flush=True)
+             test_cases.append({
+                 "input": sample_input,
+                 "output": sample_output,
+                 "explanation": "Sample case"
+             })
+
+        # Step 3: Append User Provided Extra Test Cases (CRITICAL)
+        if extra_test_cases:
+            print(f"DEBUG: Appending {len(extra_test_cases)} user-provided test cases.", flush=True)
+            for tc in extra_test_cases:
+                test_cases.append({
+                    "input": tc.get("input", ""),
+                    "output": tc.get("output", ""),
+                    "explanation": "User provided test case"
+                })
+
+        # Step 4: Construct Final Object
+        normalized_problem = {
+            "title": title,
+            "difficulty": schema.get("difficulty", "Medium"),
+            "description": description, # Do not append formats here anymore
+            "input_format": schema.get("input_format", input_format_str),
+            "output_format": schema.get("output_format", output_format_str),
+            "constraints": self._format_constraints(schema.get("constraints", {})),
+            "test_cases": test_cases,
+            "reference_solution": {
+                "python": schema.get("reference_solution_code", "") 
+            },
+            "topics": schema.get("topics", []),
+            "core_logic": schema.get("core_logic", "")
+        }
+        
+        return normalized_problem
+
+    def _extract_logic_and_schema(self, title: str, desc: str, inp: str, outp: str, constraints: str, input_fmt: str, output_fmt: str) -> Dict:
+        prompt = f"""
+        Analyze this coding problem submission and extract its core logic and structure.
+        
+        Input Data:
+        Title: {title}
+        Description: {desc}
+        Sample Input: {inp}
+        Sample Output: {outp}
+        Provided Constraints: {constraints}
+        Provided Input Format: {input_fmt}
+        Provided Output Format: {output_fmt}
+        
+        Task:
+        1. Identify the core algorithmic logic (precise explanation).
+        2. Identify input and output formats. If "Provided Input Format" is not empty, USE IT VERBATIM. Otherwise infer it.
+        3. Identify constraints. If provided by user, use them.
+        4. Write a correct Python Reference Solution function.
+        
+        Output JSON Format (Strictly):
+        {{
+            "problem_type": "math|array|string|...",
+            "difficulty": "Easy|Medium|Hard",
+            "core_logic": "Precise explanation of algorithm...",
+            "input_format": "Detailed description...",
+            "output_format": "Detailed description...",
+            "constraints": {{ "var": "range", ... }},
+            "topics": ["topic1", "topic2"],
+            "reference_solution_code": "def solve(): ..."
+        }}
+        
+        Start JSON now:
         """
-        Extract problem schema using AI
+        return self._generate_json(prompt)
+
+    def _generate_test_case_script(self, schema: Dict, sample_in: str, sample_out: str) -> str:
+        prompt = f"""
+        You are a Test Case Intelligence Engine.
+        Your task is to write a STANDALONE Python script.
+        
+        Context:
+        Core Logic: {schema.get('core_logic')}
+        Input Format: {schema.get('input_format')}
+        Constraints: {schema.get('constraints')}
+        Reference Implementation: 
+        {schema.get('reference_solution_code')}
+        
+        Requirements for the Script:
+        1. It must contain the reference solution function.
+        2. It must have a function `generate_case(type)` that generates inputs based on constraints.
+           - Support types: 'sample' (hardcoded), 'edge' (min/max values), 'small_random', 'large_random'.
+        3. It must generate exactly:
+           - 1 Sample case (from provided headers below)
+           - 2 Edge cases
+           - 2 Random cases
+           - 1 Large performance case
+        4. For each case, it must run the reference solution to get the expected output.
+        5. It must print the FINAL RESULT as a JSON list to STDOUT.
+           Format: [ {{"input": "...", "output": "...", "explanation": "..."}}, ... ]
+        
+        Sample Data to Include (PRESERVE EXACT FORMATTING/SPACING):
+        Input: 
+        '''{sample_in}'''
+        Output: 
+        '''{sample_out}'''
+        
+        Output ONLY the Python Code. No markdown.
         """
-        prompt = f"""Analyze this coding problem and extract its core structure as JSON.
-
-Problem:
-{problem_text}
-
-Return ONLY a JSON object with this structure:
-{{
-    "problem_type": "math | array | string | loop | dp | graph | etc",
-    "difficulty": "easy | medium | hard",
-    "core_logic": "clear description of the algorithm/solution approach",
-    "input_format": "description of input",
-    "output_format": "description of output",
-    "constraints": {{
-        "variable_name": {{"min": number, "max": number}}
-    }},
-    "function_signature": "suggested function name and parameters"
-}}
-
-Be precise and focus on the LOGIC, not the story."""
         
         try:
             response = self.client.models.generate_content(
                 model='gemini-2.0-flash',
                 contents=prompt
             )
-            
-            if not response.text:
-                return None
-            
-            # Parse JSON
-            text = response.text.strip()
-            if '```json' in text:
-                start = text.find('```json') + 7
-                end = text.find('```', start)
-                text = text[start:end].strip()
-            elif '{' in text:
-                start = text.find('{')
-                end = text.rfind('}') + 1
-                text = text[start:end]
-            
-            schema = json.loads(text)
-            return schema
-        
+            code = response.text
+            # Strip markdown
+            if "```python" in code:
+                code = code.split("```python")[1].split("```")[0]
+            elif "```" in code:
+                code = code.split("```")[1].split("```")[0]
+            return code.strip()
         except Exception as e:
-            print(f"AI schema extraction failed: {e}")
-            return None
+            print(f"Error generating script: {e}", flush=True)
+            return ""
 
-    def _generate_with_fallback(self, prompt: str) -> Dict:
-        """Try multiple models until one works"""
-        # List of models to try in order of preference (Newest -> Stable)
-        models_to_try = [
-            'gemini-2.0-flash',
-            'gemini-2.0-flash-lite',
-            'gemini-2.0-flash-exp',
-            'gemini-2.5-flash'
-        ]
-        
-        last_error = None
-        
-        for model in models_to_try:
-            try:
-                print(f"Attempting generation with model: {model}")
-                response = self.client.models.generate_content(
-                    model=model,
-                    contents=prompt
-                )
-                
-                if not response.text:
-                    raise ValueError("Empty response from AI")
-                    
-                problem_data = self._parse_response(response.text)
-                if problem_data:
-                    print(f"Success with model: {model}")
-                    return problem_data
-                    
-            except Exception as e:
-                print(f"Model {model} failed: {e}")
-                last_error = e
-                # Continue to next model
-                
-        # If all failed, re-raise the last error
-        raise last_error
-    
-    def _build_similar_prompt(self, sample_problem: str, sample_test_cases: str) -> str:
-        """Build prompt for generating similar problem"""
-        
-        test_case_section = ""
-        if sample_test_cases:
-            test_case_section = f"\n\nSample Test Cases:\n{sample_test_cases}"
-        
-        prompt = f"""You are an expert problem setter. Generate a NEW coding problem inspired by the sample below.
-
-CRITICAL REQUIREMENTS FOR UNIQUENESS:
-✅ MUST preserve: Core algorithm/data structure concept
-✅ MUST change: Context, scenario, variable names, all numbers/values, wording
-❌ NEVER: Copy-paste or rephrase the same problem
-❌ NEVER: Keep the same story, scenario, or domain
-
-Original College Problem:
-{sample_problem}{test_case_section}
-
-Generation Instructions:
-1. Identify the core concept (e.g., arrays, linked lists, DP, graphs)
-2. Create a COMPLETELY DIFFERENT real-world scenario that tests the same concept
-   - If original is about "students", use "products", "tasks", "events", etc.
-   - If original uses numbers [1,2,3], use different values [5,10,15]
-   - Change all variable names and descriptions
-3. Keep similar difficulty and algorithmic complexity
-4. Write it like a professional LeetCode problem
-5. Generate 5-7 test cases with edge cases
-6. Provide working Python reference solution
-
-Return in this EXACT JSON format (no markdown blocks, pure JSON only):
-{{
-    "title": "Professional Problem Title (Must be unique)",
-    "difficulty": "Easy|Medium|Hard",
-    "description": "Complete problem description with examples in markdown",
-    "constraints": "List of constraints",
-    "test_cases": [
-        {{"input": "test input", "output": "expected output", "explanation": "why"}},
-        ...
-    ],
-    "reference_solution": {{
-        "python": "complete working python solution"
-    }},
-    "template_code": {{
-        "python": "starter code template",
-        "cpp": "// TODO: Implement",
-        "java": "// TODO: Implement"
-    }},
-    "hints": ["hint 1", "hint 2"],
-    "topics": ["identified topics"],
-    "time_complexity": "O(?)",
-    "space_complexity": "O(?)",
-    "concept_analysis": "Brief explanation of core concept"
-}}
-
-IMPORTANT: Treat this as creating a fresh exam question, not translating!"""
-        
-        return prompt
-    
-    def _build_prompt(self, difficulty: str, topic: Optional[str], style: str) -> str:
-        """Build the prompt for Gemini"""
-        
-        topic_hint = f" focusing on {topic}" if topic else ""
-        
-        prompt = f"""Generate a {difficulty} difficulty coding problem{topic_hint} in {style} style.
-
-Requirements:
-1. Problem should be original and interesting
-2. Include clear problem statement with examples
-3. Provide constraints
-4. Generate 5-7 test cases (including edge cases)
-5. Provide a reference Python solution that passes all tests
-6. Problem should be solvable in Python, C++, C, and Java
-
-Return the response in this EXACT JSON format:
-{{
-    "title": "Problem Title",
-    "difficulty": "{difficulty}",
-    "description": "Complete problem description in markdown format with examples",
-    "constraints": "List of constraints",
-    "test_cases": [
-        {{"input": "test input", "output": "expected output", "explanation": "why"}},
-        ...
-    ],
-    "reference_solution": {{
-        "python": "complete python code"
-    }},
-    "hints": ["hint 1", "hint 2"],
-    "topics": ["topic1", "topic2"],
-    "time_complexity": "O(n)",
-    "space_complexity": "O(1)"
-}}
-
-Make sure the JSON is valid and properly formatted."""
-        
-        return prompt
-    
-    def _parse_response(self, response_text: str) -> Dict:
-        """Parse Gemini's response into structured data"""
-        
-        # Extract JSON from response
+    def _execute_test_case_generator(self, script_code: str) -> List[Dict]:
+        if not script_code:
+            return []
+            
         try:
-            # Find JSON content between ```json and ```
-            if "```json" in response_text:
-                start = response_text.find("```json") + 7
-                end = response_text.find("```", start)
-                json_str = response_text[start:end].strip()
-            elif "{" in response_text and "}" in response_text:
-                # Try to extract JSON directly
-                start = response_text.find("{")
-                end = response_text.rfind("}") + 1
-                json_str = response_text[start:end]
-            else:
-                raise ValueError("No JSON found in response")
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as f:
+                f.write(script_code)
+                script_path = f.name
             
-            problem_data = json.loads(json_str)
+            print(f"DEBUG: Running generated script at {script_path}", flush=True)
             
-            # Validate required fields
-            required_fields = ['title', 'description', 'test_cases', 'reference_solution']
-            for field in required_fields:
-                if field not in problem_data:
-                    raise ValueError(f"Missing required field: {field}")
-            
-            return problem_data
-            
-        except json.JSONDecodeError as e:
-            print(f"JSON parse error: {e}")
-            print(f"Response text: {response_text[:500]}")
-            return None
-        except Exception as e:
-            print(f"Parse error: {e}")
-            return None
-    
-    def validate_problem(self, problem_data: Dict) -> tuple[bool, str]:
-        """Validate generated problem quality"""
-        
-        issues = []
-        
-        # Check test cases
-        if len(problem_data.get('test_cases', [])) < 3:
-            issues.append("Needs at least 3 test cases")
-        
-        # Check solution exists
-        if 'reference_solution' not in problem_data:
-            issues.append("Missing reference solution")
-        
-        # Check description length
-        if len(problem_data.get('description', '')) < 100:
-            issues.append("Description too short")
-        
-        if issues:
-            return False, "; ".join(issues)
-        
-        return True, "Valid"
-    
-    def generate_test_cases_only(
-        self,
-        problem_description: str,
-        num_cases: int = 5
-    ) -> List[Dict]:
-        """Generate additional test cases for existing problem"""
-        
-        prompt = f"""Given this problem:
-
-{problem_description}
-
-Generate {num_cases} diverse test cases including edge cases.
-
-Return as JSON array:
-[
-    {{"input": "...", "output": "...", "explanation": "..."}},
-    ...
-]
-"""
-        
-        try:
-            response = self.client.models.generate_content(
-                model='gemini-2.0-flash-exp',
-                contents=prompt
+            # Execute
+            result = subprocess.run(
+                ['python', script_path], 
+                capture_output=True, 
+                text=True, 
+                timeout=15
             )
-            test_cases = json.loads(response.text)
-            return test_cases
+            
+            os.unlink(script_path)
+            
+            if result.returncode != 0:
+                print(f"Script Execution Error: {result.stderr}", flush=True)
+                print(f"Script Content was:\n{script_code}", flush=True)
+                return []
+                
+            # Parse JSON output
+            output_str = result.stdout.strip()
+            print(f"DEBUG: Script output: {output_str[:100]}...", flush=True)
+            
+            # Find JSON list start/end in case of extra prints
+            start = output_str.find('[')
+            end = output_str.rfind(']') + 1
+            if start != -1 and end != -1:
+                json_data = output_str[start:end]
+                try:
+                    return json.loads(json_data)
+                except json.JSONDecodeError:
+                    print(f"DEBUG: Failed to parse JSON from script output. Raw: {json_data}", flush=True)
+                    return []
+            
+            print("DEBUG: No JSON list found in script output.", flush=True)
+            return []
+            
         except Exception as e:
-            print(f"Error generating test cases: {e}")
+            print(f"Execution handling failed: {e}", flush=True)
             return []
 
+    def _generate_json(self, prompt: str) -> Optional[Dict]:
+        try:
+            response = self.client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=prompt
+            )
+            text = response.text.strip()
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0]
+            elif "{" in text:
+                start = text.find("{")
+                end = text.rfind("}") + 1
+                text = text[start:end]
+            return json.loads(text)
+        except Exception as e:
+            print(f"JSON Generation error: {e}", flush=True)
+            return None
 
-# Singleton instance
+    def _format_description(self, schema, original_desc):
+        # Description is now handled raw, with separate fields for I/O
+        return original_desc
+
+    def _format_constraints(self, constraints):
+        if isinstance(constraints, dict):
+            return "\n".join([f"{k}: {v}" for k, v in constraints.items()])
+        return str(constraints)
+
+# Singleton
 _generator = None
-
 def get_generator():
-    """Get or create problem generator instance"""
     global _generator
     if _generator is None:
         _generator = ProblemGenerator()

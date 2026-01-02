@@ -14,6 +14,10 @@ class Problem(models.Model):
     description = models.TextField()
     difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES)
     
+    input_format = models.TextField(blank=True, default="")
+    output_format = models.TextField(blank=True, default="")
+    constraints = models.TextField(blank=True, default="")
+    
     # Code templates for supported languages (starter code shown to users)
     template_code = models.JSONField(default=dict) 
     

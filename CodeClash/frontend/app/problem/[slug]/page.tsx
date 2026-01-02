@@ -16,7 +16,7 @@ export default function ProblemPage({ params }: { params: Promise<{ slug: string
 
     const [problem, setProblem] = useState<any>(null);
     const [code, setCode] = useState("");
-    const [language, setLanguage] = useState("python");
+    const [language, setLanguage] = useState("cpp");
     const [output, setOutput] = useState<any>(null);
     const [isRunning, setIsRunning] = useState(false);
     const [activeTab, setActiveTab] = useState("testcases");
@@ -111,6 +111,11 @@ export default function ProblemPage({ params }: { params: Promise<{ slug: string
             });
         } finally {
             setIsRunning(false);
+            if (problem && problem.id) {
+                axios.get(`${API_URL}/submissions/?problem_id=${problem.id}`)
+                    .then(res => setSubmissions(res.data))
+                    .catch(err => console.error("Failed to refresh submissions", err));
+            }
         }
     };
 
@@ -123,23 +128,21 @@ export default function ProblemPage({ params }: { params: Promise<{ slug: string
     }
 
     return (
-        <div className="h-screen flex flex-col bg-[#1a1a1a] text-zinc-300 font-sans overflow-hidden">
+        <div className="h-screen flex flex-col bg-[#050505] text-zinc-300 font-sans overflow-hidden selection:bg-blue-500/30">
             {/* Navbar */}
-            <div className="h-12 bg-[#0a0a0a] border-b border-zinc-800 flex items-center justify-between px-4 flex-shrink-0">
-                <div className="flex items-center gap-4">
-                    <Link href="/" className="text-xl font-bold text-blue-500 hover:text-blue-400 transition-colors flex items-center gap-2">
-                        <ChevronLeft size={18} />
-                        <span>Code<span className="text-zinc-400">Clash</span></span>
+            <div className="h-16 bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-6 flex-shrink-0 z-20">
+                <div className="flex items-center gap-6">
+                    <Link href="/" className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent hover:opacity-80 transition-opacity flex items-center gap-2">
+                        <ChevronLeft size={20} className="text-zinc-500" />
+                        Code<span className="text-zinc-500">Clash</span>
                     </Link>
 
-                    <div className="h-6 w-px bg-zinc-700"></div>
+                    <div className="h-6 w-px bg-white/10"></div>
 
-                    <div className="flex items-center gap-2">
-                        <List size={14} className="text-zinc-500" />
-                        <Link href="/problems" className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
-                            Problem List
-                        </Link>
-                    </div>
+                    <Link href="/problems" className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors">
+                        <List size={16} />
+                        Problem List
+                    </Link>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -148,12 +151,12 @@ export default function ProblemPage({ params }: { params: Promise<{ slug: string
                         size="sm"
                         onClick={handleRun}
                         disabled={isRunning}
-                        className="h-8 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 border-none gap-2 px-3 rounded"
+                        className="h-9 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 border border-white/10 hover:border-white/20 gap-2 px-5 rounded-lg transition-all font-medium"
                     >
                         {isRunning && output?.verdict === "Running..." ? (
-                            <Loader2 size={12} className="animate-spin" />
+                            <Loader2 size={14} className="animate-spin text-blue-400" />
                         ) : (
-                            <Play size={12} className="fill-current" />
+                            <Play size={14} className="fill-current" />
                         )}
                         Run
                     </Button>
@@ -161,7 +164,7 @@ export default function ProblemPage({ params }: { params: Promise<{ slug: string
                         size="sm"
                         onClick={handleSubmit}
                         disabled={isRunning}
-                        className="h-8 bg-green-600 hover:bg-green-500 text-white border-none gap-2 px-3 rounded shadow-[0_0_10px_rgba(22,163,74,0.4)]"
+                        className="h-9 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white border-none gap-2 px-6 rounded-lg shadow-lg shadow-green-500/20 hover:shadow-green-500/30 transition-all font-medium"
                     >
                         {isRunning && output?.verdict === "Judging..." ? (
                             <Loader2 size={14} className="animate-spin" />
@@ -174,16 +177,23 @@ export default function ProblemPage({ params }: { params: Promise<{ slug: string
             </div>
 
             {/* Main Content - Floating Layout */}
-            <div className="flex-1 flex overflow-hidden p-2 gap-2 bg-[#0a0a0a]">
+            <div className="flex-1 flex overflow-hidden p-3 gap-3 bg-[#050505] relative">
+                {/* Background Ambient Effects */}
+                <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0 opacity-40">
+                    <div className="absolute bottom-0 right-0 w-[40%] h-[40%] bg-blue-600/5 rounded-full blur-[100px]"></div>
+                </div>
+
                 {/* Left Panel: Description */}
-                <div className="w-1/2 h-full">
-                    <ProblemDescription problem={problem} />
+                <div className="w-1/2 h-full z-10 flex flex-col">
+                    <div className="flex-1 bg-[#0a0a0a] rounded-xl border border-white/5 overflow-hidden shadow-2xl relative">
+                        <ProblemDescription problem={problem} />
+                    </div>
                 </div>
 
                 {/* Right Panel: Code + Console */}
-                <div className="w-1/2 flex flex-col gap-2 h-full">
+                <div className="w-1/2 flex flex-col gap-3 h-full z-10">
                     {/* Code Editor */}
-                    <div className="h-[60%] rounded-lg overflow-hidden border border-zinc-800 bg-[#1e1e1e]">
+                    <div className="h-[60%] rounded-xl overflow-hidden border border-white/5 bg-[#0a0a0a] shadow-2xl relative">
                         <CodeEditor
                             language={language}
                             setLanguage={setLanguage}
@@ -193,7 +203,7 @@ export default function ProblemPage({ params }: { params: Promise<{ slug: string
                     </div>
 
                     {/* Console Panel */}
-                    <div className="h-[40%] rounded-lg overflow-hidden border border-zinc-800 bg-[#262626]">
+                    <div className="flex-1 rounded-xl overflow-hidden border border-white/5 bg-[#0a0a0a] shadow-2xl relative">
                         <TestPanel
                             problem={problem}
                             output={output}

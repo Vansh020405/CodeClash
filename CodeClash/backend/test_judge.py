@@ -63,25 +63,36 @@ def test_two_sum_python():
         return False
     
     # Correct solution
+    # Correct solution
     code = '''import sys
-import json
 
-def two_sum(nums, target):
-    seen = {}
-    for i, num in enumerate(nums):
-        complement = target - num
-        if complement in seen:
-            return [seen[complement], i]
-        seen[num] = i
-    return []
+def two_sum():
+    try:
+        line1 = sys.stdin.readline()
+        if not line1: return
+        n = int(line1.strip())
+        
+        line2 = sys.stdin.readline()
+        if not line2: return
+        nums = list(map(int, line2.strip().split()))
+        
+        line3 = sys.stdin.readline()
+        if not line3: return
+        target = int(line3.strip())
+        
+        lookup = {}
+        for i, num in enumerate(nums):
+            complement = target - num
+            if complement in lookup:
+                print(f"[{lookup[complement]}, {i}]")
+                return
+            lookup[num] = i
+        print("[]")
+    except Exception:
+        pass
 
 if __name__ == "__main__":
-    input_data = sys.stdin.read().strip()
-    nums, target = input_data.split('\n')
-    nums = json.loads(nums)
-    target = int(target)
-    result = two_sum(nums, target)
-    print(json.dumps(result))
+    two_sum()
 '''
     
     judge = Judge()

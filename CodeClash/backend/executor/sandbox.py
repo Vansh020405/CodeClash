@@ -52,12 +52,14 @@ class DockerSandbox:
     """Secure Docker-based code execution sandbox"""
     
     def __init__(self):
+        self.init_error = None
         try:
             # Use from_env() without version forcing - let Docker auto-negotiate
             self.client = docker.from_env()
             self._ensure_images()
         except Exception as e:
             print(f"Docker initialization failed: {e}")
+            self.init_error = str(e)
             self.client = None
 
     def _ensure_images(self):
@@ -106,7 +108,7 @@ class DockerSandbox:
             return {
                 "verdict": "ERROR",
                 "stdout": "",
-                "stderr": "Docker service unavailable",
+                "stderr": f"Docker service unavailable: {self.init_error}",
                 "runtime_ms": 0,
                 "memory_kb": 0
             }

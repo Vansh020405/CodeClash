@@ -36,7 +36,7 @@ export default function DashboardPage() {
             // For MVP, we'll fetch all and filter client-side or assume existing API needs update
             // Let's assume we create a new endpoint or use existing list
             // For now, let's just list all problems as a placeholder until we add the filter API
-            const response = await axios.get("http://localhost:8000/api/problems/");
+            const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/problems/`);
             setProblems(response.data);
         } catch (error) {
             console.error("Failed to fetch problems", error);

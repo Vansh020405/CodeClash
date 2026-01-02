@@ -22,5 +22,5 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
-# Run gunicorn
-CMD ["gunicorn", "core.wsgi:application", "--bind", "0.0.0.0:8000"]
+# Run migrations, seed data, and start server
+CMD sh -c "python manage.py migrate && python seed_data_v3.py && gunicorn core.wsgi:application --bind 0.0.0.0:$PORT"

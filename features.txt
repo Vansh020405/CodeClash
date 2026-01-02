@@ -1,0 +1,48 @@
+Problem:
+Candidates can solve problems but fail interviews because they can’t explain their thinking.
+
+App idea:
+After solving a problem:
+
+User records or types their explanation
+
+App scores:
+
+clarity
+
+structure
+
+assumptions
+
+trade-offs
+
+Why it helps:
+Interviews judge communication as much as correctness.
+
+Differentiator:
+LeetCode doesn’t train thinking out loud.
+
+
+
+2--------------------------------------------------------------
+“Common Follow-Ups” – Interviewer Playbook
+
+Problem:
+Candidates are surprised by follow-up questions.
+
+App idea:
+For each problem:
+
+Show common interviewer follow-ups
+
+Ask user to respond
+
+Examples:
+
+“What if input is huge?”
+
+“Can you do it in-place?”
+
+“What if data is streaming?”
+
+3---------------------------------------------------------------

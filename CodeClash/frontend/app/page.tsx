@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Code2, Zap, Trophy, TrendingUp, ArrowRight, Play, CheckCircle, Terminal, Rocket, Sparkles, Brain, Lock, FileText, Cpu } from "lucide-react";
 import axios from "axios";
 import Navbar from "@/components/Navbar";
+import { useTheme } from "@/context/ThemeContext";
 
 const API_URL = "http://localhost:8000/api";
 
 export default function HomePage() {
   const [problems, setProblems] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, easy: 0, medium: 0, hard: 0 });
+  const { isDarkMode } = useTheme();
 
   useEffect(() => {
     axios.get(`${API_URL}/problems/`)
@@ -28,35 +30,46 @@ export default function HomePage() {
       .catch(err => console.error(err));
   }, []);
 
+  const pageBg = isDarkMode ? "bg-[#050505]" : "bg-slate-50";
+  const textColor = isDarkMode ? "text-zinc-100" : "text-slate-900";
+  const mutedText = isDarkMode ? "text-zinc-400" : "text-slate-500";
+  const cardBg = isDarkMode ? "bg-[#0b0b0b] border-white/5 shadow-lg" : "bg-white border-slate-200 shadow-xl shadow-slate-200/50";
+  const sectionBg = isDarkMode ? "bg-zinc-900/20" : "bg-white";
+  const footerBg = isDarkMode ? "bg-black/40 border-white/5" : "bg-slate-50 border-slate-200";
+
   return (
-    <div className="min-h-screen bg-[#050505] text-zinc-100 font-sans selection:bg-purple-500/30 overflow-x-hidden">
+    <div className={`min-h-screen font-sans selection:bg-purple-500/30 overflow-x-hidden transition-colors duration-300 ${pageBg} ${textColor}`}>
       <Navbar />
 
-      {/* Background Ambient Glow */}
-      <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] right-[-5%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] animate-pulse"></div>
-        <div className="absolute bottom-[10%] left-[-10%] w-[40%] h-[40%] bg-purple-600/10 rounded-full blur-[120px] animate-pulse delay-700"></div>
-      </div>
+      {/* Background Ambient Glow - Only in dark mode for now, or subtle in light */}
+      {isDarkMode && (
+        <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+          <div className="absolute top-[-10%] right-[-5%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] animate-pulse"></div>
+          <div className="absolute bottom-[10%] left-[-10%] w-[40%] h-[40%] bg-purple-600/10 rounded-full blur-[120px] animate-pulse delay-700"></div>
+        </div>
+      )}
 
       {/* Hero Section */}
       <section className="relative z-10 pt-32 pb-20 px-6">
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-16">
           {/* Hero Text */}
           <div className="lg:w-1/2 text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-1.5 mb-8 backdrop-blur-md">
+            <div className={`inline-flex items-center gap-2 border rounded-full px-4 py-1.5 mb-8 backdrop-blur-md ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-slate-100 border-slate-200'}`}>
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
               </span>
-              <span className="text-sm font-medium text-zinc-300">New: Submission History & Analysis</span>
+              <span className={`text-sm font-medium ${isDarkMode ? 'text-zinc-300' : 'text-slate-600'}`}>New: Submission History & Analysis</span>
             </div>
 
-            <h1 className="text-5xl lg:text-7xl font-bold mb-6 tracking-tight leading-[1.1] bg-gradient-to-b from-white to-white/70 bg-clip-text text-transparent">
-              Master Algorithms <br />
+            <h1 className="text-5xl lg:text-7xl font-bold mb-6 tracking-tight leading-[1.1]">
+              <span className={isDarkMode ? "bg-gradient-to-b from-white to-white/70 bg-clip-text text-transparent" : "text-slate-900"}>
+                Master Algorithms <br />
+              </span>
               <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">With AI Precision</span>
             </h1>
 
-            <p className="text-lg text-zinc-400 mb-10 max-w-2xl mx-auto lg:mx-0 leading-relaxed">
+            <p className={`text-lg mb-10 max-w-2xl mx-auto lg:mx-0 leading-relaxed ${mutedText}`}>
               Experience the next generation of coding interviews.
               Real-time judging, AI-generated problems, and deep performance analytics.
               Now with full submission tracking and history.
@@ -64,31 +77,37 @@ export default function HomePage() {
 
             <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
               <Link href="/problems">
-                <Button size="lg" className="h-14 px-8 rounded-full bg-white text-black hover:bg-zinc-200 text-base font-semibold transition-all shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_30px_rgba(255,255,255,0.4)]">
+                <Button size="lg" className={`h-14 px-8 rounded-full text-base font-semibold transition-all duration-300 shadow-lg hover:scale-105 active:scale-95 ${isDarkMode
+                    ? 'bg-white text-black hover:bg-zinc-200 shadow-white/25'
+                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-blue-500/30 hover:brightness-110 border-0'
+                  }`}>
                   Start Solving
                   <ArrowRight size={18} className="ml-2" />
                 </Button>
               </Link>
               <Link href="/problem/two-sum">
-                <Button size="lg" variant="outline" className="h-14 px-8 rounded-full border-white/20 hover:bg-white/10 text-base font-semibold backdrop-blur-sm">
-                  <Play size={16} className="mr-2" />
+                <Button size="lg" variant="outline" className={`h-14 px-8 rounded-full text-base font-semibold transition-all duration-300 border-2 hover:scale-105 active:scale-95 ${isDarkMode
+                    ? 'bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/30 backdrop-blur-sm'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 shadow-sm'
+                  }`}>
+                  <Play size={16} className="mr-2 fill-current" />
                   Try Demo
                 </Button>
               </Link>
             </div>
 
             {/* Stats */}
-            <div className="mt-12 grid grid-cols-3 gap-6 border-t border-white/5 pt-8">
+            <div className={`mt-12 grid grid-cols-3 gap-6 border-t pt-8 ${isDarkMode ? 'border-white/5' : 'border-slate-200'}`}>
               <div>
-                <div className="text-3xl font-bold text-white mb-1">{stats.total}+</div>
+                <div className={`text-3xl font-bold mb-1 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{stats.total}+</div>
                 <div className="text-xs text-zinc-500 uppercase tracking-widest">Problems</div>
               </div>
               <div>
-                <div className="text-3xl font-bold text-white mb-1">50 ms</div>
+                <div className={`text-3xl font-bold mb-1 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>50 ms</div>
                 <div className="text-xs text-zinc-500 uppercase tracking-widest">Avg Latency</div>
               </div>
               <div>
-                <div className="text-3xl font-bold text-white mb-1">99.9%</div>
+                <div className={`text-3xl font-bold mb-1 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>99.9%</div>
                 <div className="text-xs text-zinc-500 uppercase tracking-widest">Uptime</div>
               </div>
             </div>
@@ -174,7 +193,7 @@ export default function HomePage() {
       </section>
 
       {/* Standardizer Workflow Section */}
-      <section className="relative z-10 py-24 bg-zinc-900/20">
+      <section className={`relative z-10 py-24 ${sectionBg}`}>
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-20">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold uppercase tracking-wider mb-4">
@@ -182,7 +201,7 @@ export default function HomePage() {
               The Engine
             </div>
             <h2 className="text-4xl md:text-5xl font-bold mb-6">How the Standardizer Works</h2>
-            <p className="text-zinc-400 max-w-2xl mx-auto text-lg">
+            <p className={`text-lg max-w-2xl mx-auto ${mutedText}`}>
               Transforming chaos into executable code. Our pipeline ensures every problem is ready for competitive solving.
             </p>
           </div>
@@ -193,13 +212,13 @@ export default function HomePage() {
 
             {/* Step 1 */}
             <div className="relative z-10 group">
-              <div className="bg-[#0b0b0b] border border-white/5 rounded-2xl p-8 hover:border-blue-500/30 transition-all duration-300 h-full flex flex-col items-center text-center shadow-lg hover:shadow-blue-500/10">
-                <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                  <FileText size={32} className="text-zinc-400 group-hover:text-blue-400 transition-colors" />
+              <div className={`${cardBg} rounded-2xl p-8 hover:border-blue-500/30 transition-all duration-300 h-full flex flex-col items-center text-center hover:shadow-blue-500/10`}>
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 ${isDarkMode ? 'bg-zinc-900 border-white/10' : 'bg-slate-50 border-slate-200'}`}>
+                  <FileText size={32} className={`group-hover:text-blue-400 transition-colors ${isDarkMode ? 'text-zinc-400' : 'text-slate-400'}`} />
                 </div>
-                <div className="px-3 py-1 bg-zinc-800/50 rounded-full text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-4 border border-white/5">Step 01</div>
-                <h3 className="text-xl font-bold text-white mb-3">Raw Input</h3>
-                <p className="text-zinc-400 text-sm leading-relaxed">
+                <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 border ${isDarkMode ? 'bg-zinc-800/50 text-zinc-500 border-white/5' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>Step 01</div>
+                <h3 className={`text-xl font-bold mb-3 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Raw Input</h3>
+                <p className={`text-sm leading-relaxed ${mutedText}`}>
                   Users provide raw problem descriptions, unstructured text, or even vague algorithm ideas. No formatting required.
                 </p>
               </div>
@@ -207,14 +226,14 @@ export default function HomePage() {
 
             {/* Step 2 */}
             <div className="relative z-10 group">
-              <div className="bg-[#0b0b0b] border border-white/5 rounded-2xl p-8 hover:border-purple-500/30 transition-all duration-300 h-full flex flex-col items-center text-center shadow-lg hover:shadow-purple-500/10">
-                <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 relative">
+              <div className={`${cardBg} rounded-2xl p-8 hover:border-purple-500/30 transition-all duration-300 h-full flex flex-col items-center text-center hover:shadow-purple-500/10`}>
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 relative ${isDarkMode ? 'bg-zinc-900 border-white/10' : 'bg-slate-50 border-slate-200'}`}>
                   <div className="absolute inset-0 bg-purple-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <Cpu size={32} className="text-zinc-400 group-hover:text-purple-400 transition-colors relative z-10" />
+                  <Cpu size={32} className={`group-hover:text-purple-400 transition-colors relative z-10 ${isDarkMode ? 'text-zinc-400' : 'text-slate-400'}`} />
                 </div>
-                <div className="px-3 py-1 bg-zinc-800/50 rounded-full text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-4 border border-white/5">Step 02</div>
-                <h3 className="text-xl font-bold text-white mb-3">AI Normalization</h3>
-                <p className="text-zinc-400 text-sm leading-relaxed">
+                <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 border ${isDarkMode ? 'bg-zinc-800/50 text-zinc-500 border-white/5' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>Step 02</div>
+                <h3 className={`text-xl font-bold mb-3 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>AI Normalization</h3>
+                <p className={`text-sm leading-relaxed ${mutedText}`}>
                   Our "Standardizer" engine analyzes requirements, extracts test cases, defined I/O formats, and generates validation scripts.
                 </p>
               </div>
@@ -222,13 +241,13 @@ export default function HomePage() {
 
             {/* Step 3 */}
             <div className="relative z-10 group">
-              <div className="bg-[#0b0b0b] border border-white/5 rounded-2xl p-8 hover:border-green-500/30 transition-all duration-300 h-full flex flex-col items-center text-center shadow-lg hover:shadow-green-500/10">
-                <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                  <Code2 size={32} className="text-zinc-400 group-hover:text-green-400 transition-colors" />
+              <div className={`${cardBg} rounded-2xl p-8 hover:border-green-500/30 transition-all duration-300 h-full flex flex-col items-center text-center hover:shadow-green-500/10`}>
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 ${isDarkMode ? 'bg-zinc-900 border-white/10' : 'bg-slate-50 border-slate-200'}`}>
+                  <Code2 size={32} className={`group-hover:text-green-400 transition-colors ${isDarkMode ? 'text-zinc-400' : 'text-slate-400'}`} />
                 </div>
-                <div className="px-3 py-1 bg-zinc-800/50 rounded-full text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-4 border border-white/5">Step 03</div>
-                <h3 className="text-xl font-bold text-white mb-3">Ready to Solve</h3>
-                <p className="text-zinc-400 text-sm leading-relaxed">
+                <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 border ${isDarkMode ? 'bg-zinc-800/50 text-zinc-500 border-white/5' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>Step 03</div>
+                <h3 className={`text-xl font-bold mb-3 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Ready to Solve</h3>
+                <p className={`text-sm leading-relaxed ${mutedText}`}>
                   A fully structured coding challenge is generated, complete with hidden test cases, ready for the live execution environment.
                 </p>
               </div>
@@ -241,25 +260,25 @@ export default function HomePage() {
       <section className="relative z-10 py-24">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold mb-4">Everything needed to excel</h2>
-            <p className="text-zinc-400">Built for performance, designed for learning.</p>
+            <h2 className={`text-3xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Everything needed to excel</h2>
+            <p className={mutedText}>Built for performance, designed for learning.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
-            <FeatureCard icon={<Zap className="text-yellow-400" />} title="Fast Execution" desc="Docker-based sandbox for safe, instant code runs." />
-            <FeatureCard icon={<Trophy className="text-purple-400" />} title="Real-time Judging" desc="Immediate verdict on 50+ test cases per problem." />
-            <FeatureCard icon={<TrendingUp className="text-blue-400" />} title="Performance Metrics" desc="Detailed analytics on runtime and memory usage." />
+            <FeatureCard isDarkMode={isDarkMode} icon={<Zap className="text-yellow-400" />} title="Fast Execution" desc="Docker-based sandbox for safe, instant code runs." />
+            <FeatureCard isDarkMode={isDarkMode} icon={<Trophy className="text-purple-400" />} title="Real-time Judging" desc="Immediate verdict on 50+ test cases per problem." />
+            <FeatureCard isDarkMode={isDarkMode} icon={<TrendingUp className="text-blue-400" />} title="Performance Metrics" desc="Detailed analytics on runtime and memory usage." />
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/5 bg-black/40 backdrop-blur-xl py-12">
+      <footer className={`relative z-10 border-t backdrop-blur-xl py-12 ${footerBg}`}>
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold">
               C
             </div>
-            <span className="text-xl font-bold text-white">CodeClash</span>
+            <span className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>CodeClash</span>
           </div>
           <p className="text-zinc-500 text-sm">© 2025 CodeClash. Built for builders.</p>
         </div>
@@ -268,24 +287,17 @@ export default function HomePage() {
   );
 }
 
-function StatBox({ label, value, icon }: any) {
-  return (
-    <div className="bg-zinc-900/40 backdrop-blur-md border border-white/5 p-4 rounded-2xl hover:bg-zinc-900/60 transition-colors">
-      <div className="flex items-center gap-3 mb-2">
-        <div className="p-2 bg-white/5 rounded-lg">{icon}</div>
-        <span className="text-2xl font-bold text-white">{value}</span>
-      </div>
-      <p className="text-xs text-zinc-500 uppercase tracking-wide font-medium text-left pl-1">{label}</p>
-    </div>
-  )
-}
+function FeatureCard({ icon, title, desc, isDarkMode }: any) {
+  const cardBg = isDarkMode ? "bg-zinc-900/20 border-white/5 hover:border-white/10 hover:bg-zinc-900/40" : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50";
+  const iconBg = isDarkMode ? "bg-white/5" : "bg-slate-100";
+  const titleColor = isDarkMode ? "text-white" : "text-slate-900";
+  const descColor = isDarkMode ? "text-zinc-400" : "text-slate-500";
 
-function FeatureCard({ icon, title, desc }: any) {
   return (
-    <div className="p-6 rounded-2xl bg-zinc-900/20 border border-white/5 hover:border-white/10 hover:bg-zinc-900/40 transition-all group">
-      <div className="mb-4 p-3 bg-white/5 rounded-xl w-fit group-hover:scale-110 transition-transform duration-300">{icon}</div>
-      <h3 className="text-lg font-bold text-white mb-2">{title}</h3>
-      <p className="text-zinc-400 text-sm leading-relaxed">{desc}</p>
+    <div className={`p-6 rounded-2xl border transition-all group ${cardBg}`}>
+      <div className={`mb-4 p-3 rounded-xl w-fit group-hover:scale-110 transition-transform duration-300 ${iconBg}`}>{icon}</div>
+      <h3 className={`text-lg font-bold mb-2 ${titleColor}`}>{title}</h3>
+      <p className={`text-sm leading-relaxed ${descColor}`}>{desc}</p>
     </div>
   )
 }

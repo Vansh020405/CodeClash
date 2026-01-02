@@ -44,6 +44,7 @@ class TestCase(models.Model):
     problem = models.ForeignKey(Problem, related_name='test_cases', on_delete=models.CASCADE)
     input_data = models.TextField(help_text="Raw input data for the test case")
     expected_output = models.TextField(help_text="Expected output (generated from reference solution)")
+    explanation = models.TextField(blank=True, default="", help_text="Explanation for the test case")
     is_hidden = models.BooleanField(default=False, help_text="Hidden test cases only used in Submit mode")
     order = models.IntegerField(default=0, help_text="Execution order")
     

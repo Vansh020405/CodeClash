@@ -29,6 +29,11 @@
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+    
+    /* Light Mode Scrollbar */
+    --scrollbar-track: #f1f5f9;
+    --scrollbar-thumb: #cbd5e1;
+    --scrollbar-thumb-hover: #94a3b8;
   }
 
   .dark {
@@ -56,6 +61,11 @@
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+
+    /* Dark Mode Scrollbar */
+    --scrollbar-track: #262626;
+    --scrollbar-thumb: #52525b;
+    --scrollbar-thumb-hover: #71717a;
   }
 }
 
@@ -69,12 +79,12 @@
   }
 }
 
-/* Custom Scrollbars for Dark Theme */
+/* Custom Scrollbars */
 .problem-scrollbar,
 .console-scrollbar,
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #52525b #262626;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 .problem-scrollbar::-webkit-scrollbar,
@@ -87,14 +97,14 @@
 .problem-scrollbar::-webkit-scrollbar-track,
 .console-scrollbar::-webkit-scrollbar-track,
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: #262626;
+  background: var(--scrollbar-track);
   border-radius: 4px;
 }
 
 .problem-scrollbar::-webkit-scrollbar-thumb,
 .console-scrollbar::-webkit-scrollbar-thumb,
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #52525b;
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
   transition: background 0.2s;
 }
@@ -102,5 +112,5 @@
 .problem-scrollbar::-webkit-scrollbar-thumb:hover,
 .console-scrollbar::-webkit-scrollbar-thumb:hover,
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #71717a;
+  background: var(--scrollbar-thumb-hover);
 }

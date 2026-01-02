@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Copy, ArrowRight, CheckCircle2, AlertCircle, FileText, Code2, Database, Layout, Rocket, Loader2 } from "lucide-react";
+import { useTheme } from "@/context/ThemeContext";
 
 export default function ProblemParserPage() {
     const router = useRouter();
@@ -12,6 +13,7 @@ export default function ProblemParserPage() {
     const [parsedData, setParsedData] = useState<any>(null);
     const [isParsing, setIsParsing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const { isDarkMode } = useTheme();
 
     // Enhanced Parsing Logic
     const handleParse = () => {
@@ -49,37 +51,89 @@ export default function ProblemParserPage() {
 
             // 3. Description parsing (Everything before "Input Format" or "Constraints")
             let descriptionEndIndex = lines.length;
-            ["Input Format:", "Input Format", "Constraints:", "Constraints", "Output Format"].forEach(keyword => {
+            ["Input Format:", "Input Format", "Constraints:", "Constraints", "Output Format", "Sample Input"].forEach(keyword => {
                 const idx = lines.findIndex((l, i) => i > 0 && l.toLowerCase().startsWith(keyword.toLowerCase()));
                 if (idx !== -1 && idx < descriptionEndIndex) descriptionEndIndex = idx;
             });
             // Skip title line for description
             const description = lines.slice(lines.indexOf(title) + 1, descriptionEndIndex).join('\n').trim();
 
-            // 4. Parsing Test Cases from "ANSWER:" section
+            // 4. Parsing Test Cases
             const testCases = [];
 
-            // Find where "ANSWER:" or similar test case section starts
+            // 4a. Parse Sample Cases (e.g. "Sample Input 1", "Sample Output 1", "Explanation 1")
+            // BETTER STRATEGY: Scan for ALL "Sample Input" blocks
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].toLowerCase().startsWith("sample input")) {
+                    // Found a sample case start
+                    let inputLines = [];
+                    let outputLines = [];
+                    let explanationLines = [];
+                    let stage = 'input'; // input, output, explanation
+
+                    let j = i + 1;
+                    while (j < lines.length) {
+                        const line = lines[j];
+                        const lower = line.toLowerCase();
+
+                        // Stop if we hit new section
+                        if (lower.startsWith("answer:") || lower.startsWith("test case") || lower.startsWith("sample input")) {
+                            break;
+                        }
+
+                        if (lower.startsWith("sample output") || lower.startsWith("output:")) {
+                            stage = 'output';
+                            j++;
+                            continue;
+                        }
+                        if (lower.startsWith("explanation")) {
+                            stage = 'explanation';
+                            j++;
+                            continue;
+                        }
+
+                        if (stage === 'input') inputLines.push(line);
+                        else if (stage === 'output') outputLines.push(line);
+                        else if (stage === 'explanation') explanationLines.push(line);
+
+                        j++;
+                    }
+
+                    if (inputLines.length > 0 && outputLines.length > 0) {
+                        testCases.push({
+                            input: inputLines.join('\n').trim(),
+                            output: outputLines.join('\n').trim(),
+                            explanation: explanationLines.join('\n').trim()
+                        });
+                    }
+                }
+            }
+
+            // 4b. Parse "ANSWER:" section
             const answerSectionIndex = lines.findIndex(l => l.includes("ANSWER:") || l.includes("Test case 1"));
 
             if (answerSectionIndex !== -1) {
                 let currentInputLines: string[] = [];
                 let currentOutputLines: string[] = [];
-                let state: 'idle' | 'input' | 'output' = 'idle';
+                let currentExplanationLines: string[] = [];
+                let state: 'idle' | 'input' | 'output' | 'explanation' = 'idle';
 
                 for (let i = answerSectionIndex; i < lines.length; i++) {
                     const line = lines[i].trim();
-                    if (!line) continue;
+                    if (!line || line.toLowerCase() === "answer:") continue; // Skip empty lines and "ANSWER:" header
 
+                    // Check for new test case start
                     if (line.toLowerCase().startsWith("test case")) {
-                        // If we were parsing a previous case, save it
+                        // Save previous case
                         if (currentInputLines.length > 0 && currentOutputLines.length > 0) {
                             testCases.push({
                                 input: currentInputLines.join('\n').trim(),
-                                output: currentOutputLines.join('\n').trim()
+                                output: currentOutputLines.join('\n').trim(),
+                                explanation: currentExplanationLines.join('\n').trim()
                             });
                             currentInputLines = [];
                             currentOutputLines = [];
+                            currentExplanationLines = [];
                         }
                         state = 'idle';
                         continue;
@@ -93,18 +147,26 @@ export default function ProblemParserPage() {
                         state = 'output';
                         continue;
                     }
+                    // Detect "Explanation" or "Explanation 1"
+                    if (line.toLowerCase().startsWith("explanation")) {
+                        state = 'explanation';
+                        continue;
+                    }
 
                     if (state === 'input') {
                         currentInputLines.push(line);
                     } else if (state === 'output') {
                         currentOutputLines.push(line);
+                    } else if (state === 'explanation') {
+                        currentExplanationLines.push(line);
                     }
                 }
                 // Push last case
                 if (currentInputLines.length > 0 && currentOutputLines.length > 0) {
                     testCases.push({
                         input: currentInputLines.join('\n').trim(),
-                        output: currentOutputLines.join('\n').trim()
+                        output: currentOutputLines.join('\n').trim(),
+                        explanation: currentExplanationLines.join('\n').trim()
                     });
                 }
             }
@@ -116,7 +178,7 @@ export default function ProblemParserPage() {
                 outputFormat,
                 constraints: constraintsRaw.split('\n').filter(c => c.trim().length > 0),
                 testCases: testCases,
-                tags: [] // remove static tags as they aren't in input
+                tags: [] // remove static tags
             });
             setIsParsing(false);
         }, 800);
@@ -143,7 +205,7 @@ export default function ProblemParserPage() {
                         test_cases: parsedData.testCases.map((tc: any) => ({
                             input: tc.input,
                             output: tc.output,
-                            explanation: "Parsed from raw input"
+                            explanation: tc.explanation || "" // Use parsed explanation
                         }))
                     }
                 }),
@@ -164,8 +226,16 @@ export default function ProblemParserPage() {
         }
     };
 
+    const pageBg = isDarkMode ? "bg-[#050505]" : "bg-slate-50";
+    const textColor = isDarkMode ? "text-zinc-100" : "text-slate-900";
+    const panelBg = isDarkMode ? "bg-[#0a0a0a] border-white/10" : "bg-white border-slate-200";
+    const headerBg = isDarkMode ? "border-white/5 bg-white/[0.02]" : "border-slate-100 bg-slate-50/50";
+    const inputBg = isDarkMode ? "bg-zinc-900 border-white/5 text-zinc-300" : "bg-slate-50 border-slate-200 text-slate-800";
+    const mutedText = isDarkMode ? "text-zinc-400" : "text-slate-500";
+    const labelColor = isDarkMode ? "text-zinc-500" : "text-slate-400";
+
     return (
-        <div className="min-h-screen bg-[#050505] text-zinc-100 font-sans selection:bg-blue-500/30">
+        <div className={`min-h-screen font-sans selection:bg-blue-500/30 transition-colors duration-300 ${pageBg} ${textColor}`}>
             <Navbar />
 
             <div className="max-w-7xl mx-auto px-6 pt-24 pb-20">
@@ -173,7 +243,7 @@ export default function ProblemParserPage() {
                     <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
                         Raw Problem Parser
                     </h1>
-                    <p className="text-zinc-400 max-w-2xl mx-auto text-lg">
+                    <p className={`max-w-2xl mx-auto text-lg ${mutedText}`}>
                         Paste unstructured problem text below. Our engine will smartly segregate it into
                         title, description, constraints, and test cases.
                     </p>
@@ -181,9 +251,9 @@ export default function ProblemParserPage() {
 
                 <div className="grid lg:grid-cols-2 gap-8 h-[800px]">
                     {/* Left Column: Raw Input */}
-                    <div className="flex flex-col h-full bg-[#0a0a0a] border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-white/[0.02]">
-                            <div className="flex items-center gap-2 text-zinc-400 font-medium text-sm">
+                    <div className={`flex flex-col h-full rounded-2xl overflow-hidden shadow-2xl border ${panelBg}`}>
+                        <div className={`flex items-center justify-between px-4 py-3 border-b ${headerBg}`}>
+                            <div className={`flex items-center gap-2 font-medium text-sm ${mutedText}`}>
                                 <FileText size={16} className="text-blue-400" />
                                 Raw Input Text
                             </div>
@@ -191,7 +261,7 @@ export default function ProblemParserPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setRawInput("")}
-                                className="h-8 text-xs text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
+                                className={`h-8 text-xs hover:bg-white/5 ${isDarkMode ? 'text-zinc-500 hover:text-zinc-300' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
                             >
                                 Clear
                             </Button>
@@ -201,7 +271,7 @@ export default function ProblemParserPage() {
                                 value={rawInput}
                                 onChange={(e) => setRawInput(e.target.value)}
                                 placeholder="Paste your problem text here..."
-                                className="w-full h-full bg-transparent p-5 text-sm font-mono text-zinc-300 resize-none focus:outline-none placeholder:text-zinc-700 custom-scrollbar"
+                                className={`w-full h-full bg-transparent p-5 text-sm font-mono resize-none focus:outline-none custom-scrollbar ${isDarkMode ? 'text-zinc-300 placeholder:text-zinc-700' : 'text-slate-700 placeholder:text-slate-400'}`}
                                 spellCheck={false}
                             />
                             {rawInput && !parsedData && !isParsing && (
@@ -218,17 +288,17 @@ export default function ProblemParserPage() {
                     </div>
 
                     {/* Right Column: Structured Output */}
-                    <div className="flex flex-col h-full bg-[#0a0a0a] border border-white/10 rounded-2xl overflow-hidden shadow-2xl relative">
+                    <div className={`flex flex-col h-full rounded-2xl overflow-hidden shadow-2xl border relative ${panelBg}`}>
                         {/* Loading Overlay */}
                         {isParsing && (
-                            <div className="absolute inset-0 bg-[#0a0a0a]/90 backdrop-blur-sm z-20 flex flex-col items-center justify-center">
+                            <div className={`absolute inset-0 backdrop-blur-sm z-20 flex flex-col items-center justify-center ${isDarkMode ? 'bg-[#0a0a0a]/90' : 'bg-white/90'}`}>
                                 <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4"></div>
-                                <div className="text-zinc-400 font-mono text-sm animate-pulse">Analyzing text structure...</div>
+                                <div className={`font-mono text-sm animate-pulse ${mutedText}`}>Analyzing text structure...</div>
                             </div>
                         )}
 
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-white/[0.02]">
-                            <div className="flex items-center gap-2 text-zinc-400 font-medium text-sm">
+                        <div className={`flex items-center justify-between px-4 py-3 border-b ${headerBg}`}>
+                            <div className={`flex items-center gap-2 font-medium text-sm ${mutedText}`}>
                                 <Layout size={16} className="text-green-400" />
                                 Structured Data
                             </div>
@@ -264,8 +334,8 @@ export default function ProblemParserPage() {
 
                         <div className="flex-1 p-6 overflow-y-auto custom-scrollbar space-y-8">
                             {!parsedData ? (
-                                <div className="h-full flex flex-col items-center justify-center text-zinc-600 space-y-4">
-                                    <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-center">
+                                <div className={`h-full flex flex-col items-center justify-center space-y-4 ${isDarkMode ? 'text-zinc-600' : 'text-slate-400'}`}>
+                                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-zinc-900 border border-white/5' : 'bg-slate-50 border border-slate-100'}`}>
                                         <Database size={24} className="opacity-50" />
                                     </div>
                                     <p className="text-sm">Waiting for input...</p>
@@ -275,16 +345,16 @@ export default function ProblemParserPage() {
                                     {/* Title Section */}
                                     <div className="group relative">
                                         <div className="absolute -left-3 top-0 bottom-0 w-1 bg-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                        <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest mb-1.5 block">Problem Title</label>
-                                        <div className="text-xl font-bold text-white bg-white/5 p-3 rounded-lg border border-white/5">
+                                        <label className={`text-[10px] uppercase font-bold tracking-widest mb-1.5 block ${labelColor}`}>Problem Title</label>
+                                        <div className={`text-xl font-bold p-3 rounded-lg border ${isDarkMode ? 'text-white bg-white/5 border-white/5' : 'text-slate-900 bg-slate-50 border-slate-200'}`}>
                                             {parsedData.title}
                                         </div>
                                     </div>
 
                                     {/* Description */}
                                     <div>
-                                        <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest mb-1.5 block">Description</label>
-                                        <div className="text-sm text-zinc-300 leading-relaxed bg-zinc-900/50 p-4 rounded-xl border border-white/5 font-serif whitespace-pre-wrap">
+                                        <label className={`text-[10px] uppercase font-bold tracking-widest mb-1.5 block ${labelColor}`}>Description</label>
+                                        <div className={`text-sm leading-relaxed p-4 rounded-xl border font-serif whitespace-pre-wrap ${isDarkMode ? 'text-zinc-300 bg-zinc-900/50 border-white/5' : 'text-slate-700 bg-slate-50 border-slate-200'}`}>
                                             {parsedData.description}
                                         </div>
                                     </div>
@@ -293,16 +363,16 @@ export default function ProblemParserPage() {
                                     <div className="grid grid-cols-1 gap-6">
                                         {parsedData.inputFormat && (
                                             <div>
-                                                <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest mb-1.5 block">Input Format</label>
-                                                <div className="text-xs text-zinc-400 bg-zinc-900 p-3 rounded-lg border border-white/5 whitespace-pre-wrap">
+                                                <label className={`text-[10px] uppercase font-bold tracking-widest mb-1.5 block ${labelColor}`}>Input Format</label>
+                                                <div className={`text-xs p-3 rounded-lg border whitespace-pre-wrap ${inputBg}`}>
                                                     {parsedData.inputFormat}
                                                 </div>
                                             </div>
                                         )}
                                         {parsedData.outputFormat && (
                                             <div>
-                                                <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest mb-1.5 block">Output Format</label>
-                                                <div className="text-xs text-zinc-400 bg-zinc-900 p-3 rounded-lg border border-white/5 whitespace-pre-wrap">
+                                                <label className={`text-[10px] uppercase font-bold tracking-widest mb-1.5 block ${labelColor}`}>Output Format</label>
+                                                <div className={`text-xs p-3 rounded-lg border whitespace-pre-wrap ${inputBg}`}>
                                                     {parsedData.outputFormat}
                                                 </div>
                                             </div>
@@ -312,10 +382,10 @@ export default function ProblemParserPage() {
                                     {/* Constraints */}
                                     {parsedData.constraints && parsedData.constraints.length > 0 && (
                                         <div>
-                                            <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest mb-1.5 block">Constraints</label>
+                                            <label className={`text-[10px] uppercase font-bold tracking-widest mb-1.5 block ${labelColor}`}>Constraints</label>
                                             <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                                 {parsedData.constraints.map((c: string, i: number) => (
-                                                    <li key={i} className="text-xs text-zinc-300 bg-zinc-900 px-3 py-2 rounded border border-white/5 font-mono flex items-center gap-2">
+                                                    <li key={i} className={`text-xs px-3 py-2 rounded border font-mono flex items-center gap-2 ${inputBg}`}>
                                                         <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
                                                         {c}
                                                     </li>
@@ -327,18 +397,31 @@ export default function ProblemParserPage() {
                                     {/* Test Cases */}
                                     {parsedData.testCases && parsedData.testCases.length > 0 && (
                                         <div>
-                                            <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest mb-1.5 block">Extracted Test Cases ({parsedData.testCases.length})</label>
+                                            <label className={`text-[10px] uppercase font-bold tracking-widest mb-1.5 block ${labelColor}`}>Extracted Test Cases ({parsedData.testCases.length})</label>
                                             <div className="space-y-3">
                                                 {parsedData.testCases.map((tc: any, i: number) => (
-                                                    <div key={i} className="flex gap-4 p-3 bg-zinc-900 border border-white/5 rounded-lg text-xs font-mono">
-                                                        <div className="flex-1">
-                                                            <span className="text-zinc-500 text-[10px] uppercase font-bold mb-1 block">Input</span>
-                                                            <div className="text-blue-200 bg-blue-500/5 p-2 rounded border border-blue-500/10 whitespace-pre-wrap">{tc.input}</div>
+                                                    <div key={i} className={`flex flex-col border rounded-lg text-xs font-mono overflow-hidden ${isDarkMode ? 'bg-zinc-900 border-white/5' : 'bg-white border-slate-200'}`}>
+                                                        <div className={`flex gap-4 p-3 border-b ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
+                                                            <div className="flex-1">
+                                                                <span className={`text-[10px] uppercase font-bold mb-1 block ${labelColor}`}>Input</span>
+                                                                <div className="text-blue-200 bg-blue-500/5 p-2 rounded border border-blue-500/10 whitespace-pre-wrap" style={{ color: isDarkMode ? '#BFDBFE' : '#1e40af' }}>{tc.input}</div>
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <span className={`text-[10px] uppercase font-bold mb-1 block ${labelColor}`}>Output</span>
+                                                                <div className="text-green-200 bg-green-500/5 p-2 rounded border border-green-500/10 whitespace-pre-wrap" style={{ color: isDarkMode ? '#BBF7D0' : '#166534' }}>{tc.output}</div>
+                                                            </div>
                                                         </div>
-                                                        <div className="flex-1">
-                                                            <span className="text-zinc-500 text-[10px] uppercase font-bold mb-1 block">Output</span>
-                                                            <div className="text-green-200 bg-green-500/5 p-2 rounded border border-green-500/10 whitespace-pre-wrap">{tc.output}</div>
-                                                        </div>
+                                                        {tc.explanation && (
+                                                            <div className={`p-3 border-t ${isDarkMode ? 'bg-[#121212] border-white/5' : 'bg-slate-50 border-slate-100'}`}>
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <div className="w-0.5 h-2 bg-blue-500 rounded-full"></div>
+                                                                    <span className={`text-[10px] uppercase font-bold ${labelColor}`}>Explanation</span>
+                                                                </div>
+                                                                <div className={`pl-3 leading-relaxed opacity-90 whitespace-pre-wrap ${isDarkMode ? 'text-zinc-400' : 'text-slate-600'}`}>
+                                                                    {tc.explanation}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>

@@ -85,6 +85,33 @@ class ProblemGenerator:
                     "explanation": "User provided test case"
                 })
 
+        # Step 3.5: Append Extracted Examples from Text (Optional)
+        extracted_examples = schema.get("extracted_examples", [])
+        if extracted_examples:
+            print(f"DEBUG: Appending {len(extracted_examples)} extracted examples.", flush=True)
+            for tc in extracted_examples:
+                tc_input = tc.get("input", "").strip()
+                tc_explanation = tc.get("explanation", "").strip()
+                
+                # Check if this input is already in test_cases
+                existing_index = -1
+                for i, existing in enumerate(test_cases):
+                    if existing.get("input", "").strip() == tc_input:
+                        existing_index = i
+                        break
+                
+                if existing_index != -1:
+                    # Update existing explanation if the new one is better (and not just empty)
+                    current_expl = test_cases[existing_index].get("explanation", "")
+                    if tc_explanation and (current_expl in ["Sample case", "Extracted from description", ""] or not current_expl):
+                        test_cases[existing_index]["explanation"] = tc_explanation
+                else:
+                    test_cases.append({
+                        "input": tc.get("input", ""),
+                        "output": tc.get("output", ""),
+                        "explanation": tc_explanation or "Extracted from description"
+                    })
+
         # Step 4: Construct Final Object
         normalized_problem = {
             "title": title,
@@ -120,7 +147,8 @@ class ProblemGenerator:
         1. Identify the core algorithmic logic (precise explanation).
         2. Identify input and output formats. If "Provided Input Format" is not empty, USE IT VERBATIM. Otherwise infer it.
         3. Identify constraints. If provided by user, use them.
-        4. Write a correct Python Reference Solution function.
+        4. Extract ALL examples found in the text. Look specifically for "Explanation", "Explanation 1", etc. appearing after outputs. Capture the full explanation text.
+        5. Write a correct Python Reference Solution function.
         
         Output JSON Format (Strictly):
         {{
@@ -131,6 +159,9 @@ class ProblemGenerator:
             "output_format": "Detailed description...",
             "constraints": {{ "var": "range", ... }},
             "topics": ["topic1", "topic2"],
+            "extracted_examples": [
+                {{"input": "...", "output": "...", "explanation": "Full text of explanation..."}}
+            ],
             "reference_solution_code": "def solve(): ..."
         }}
         

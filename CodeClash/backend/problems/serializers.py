@@ -4,7 +4,7 @@ from .models import Problem, TestCase
 class TestCaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = TestCase
-        fields = ['input_data', 'expected_output', 'is_hidden']
+        fields = ['input_data', 'expected_output', 'is_hidden', 'explanation']
 
 class ProblemListSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()

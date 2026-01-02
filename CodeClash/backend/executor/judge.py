@@ -47,11 +47,8 @@ class Judge:
                 "test_cases": []
             }
         
-        # Get test cases based on mode
-        if mode == "run":
-            test_cases = problem.test_cases.filter(is_hidden=False)
-        else:  # submit
-            test_cases = problem.test_cases.all()
+        # Get test cases (Run All Tests regardless of mode, as requested by user)
+        test_cases = problem.test_cases.all()
         
         if not test_cases.exists():
             return {
@@ -77,14 +74,27 @@ class Judge:
             # Map verdict to UI contract
             status = "Passed" if result["verdict"] == "Accepted" else "Failed"
             
-            test_case_result = {
-                "id": idx,
-                "status": status,
-                "input": test_case.input_data,
-                "expected_output": test_case.expected_output,
-                "user_output": result.get("stdout", ""),
-                "runtime_ms": result.get("runtime_ms", 0),
-            }
+            # Mask hidden test case data
+            if test_case.is_hidden:
+                test_case_result = {
+                    "id": idx,
+                    "status": status,
+                    "input": "Hidden Test Case",
+                    "expected_output": "Hidden Test Case",
+                    "user_output": "Hidden Test Case",
+                    "runtime_ms": result.get("runtime_ms", 0),
+                    "is_hidden": True
+                }
+            else:
+                test_case_result = {
+                    "id": idx,
+                    "status": status,
+                    "input": test_case.input_data,
+                    "expected_output": test_case.expected_output,
+                    "user_output": result.get("stdout", ""),
+                    "runtime_ms": result.get("runtime_ms", 0),
+                    "is_hidden": False
+                }
             
             # Add error info if present
             if result.get("stderr"):
@@ -111,8 +121,8 @@ class Judge:
                 else: # Wrong Answer or other
                     overall_verdict = result["verdict"]
                 
-                if mode == "run":
-                    break
+                # NOTE: We continue running all tests even on failure to show full results
+                # as per user request "show all test cases if passed or not"
         
         return {
             "verdict": overall_verdict,

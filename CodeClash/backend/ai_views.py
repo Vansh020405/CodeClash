@@ -141,6 +141,7 @@ def save_generated_problem(request):
                 problem=problem,
                 input_data=tc_data.get('input', ''),
                 expected_output=tc_data.get('output', ''),
+                explanation=explanation, # Save the explanation!
                 is_hidden=is_hidden, 
                 order=idx
             )
